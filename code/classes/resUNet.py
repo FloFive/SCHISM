@@ -96,44 +96,44 @@ class ResUNet:
             else:
                 raise Exception(repr(self) + ' class - training and testing dataset must be provided')
 
-        if "epochs" in kwargs:
+        if "epochs" in kwargs:  # Total number of iterations over the entire training dataset
             self.epochs = int(kwargs['epochs'])
         else:
             self.epochs = 50
         self.FILE_TXT = self.FILE_TXT + "\nepochs = " + str(self.epochs)
 
-        if "batch_size" in kwargs:
+        if "batch_size" in kwargs:  # Number of samples per gradient update
             self.batch_size = int(kwargs['batch_size'])
         else:
             self.batch_size = 8
         self.FILE_TXT = self.FILE_TXT + "\nbatch_size = " + str(self.batch_size)
 
-        if "learningRate" in kwargs:
+        if "learningRate" in kwargs:  # Step size for updating the weights
             self.learning_rate = float(kwargs['learningRate'])
         else:
             self.learning_rate = 1e-5
         self.FILE_TXT = self.FILE_TXT + "\nlearningRate = " + str(self.learning_rate)
 
-        if "L2" in kwargs:
+        if "L2" in kwargs:  # L2 regularization factor to prevent overfitting
             self.L2 = float(kwargs['L2'])
         else:
             self.L2 = 1e-5
         self.FILE_TXT = self.FILE_TXT + "\nL2 = " + str(self.L2)
 
-        if "batchNorm" in kwargs:
+        if "batchNorm" in kwargs:  # Whether to use batch normalization
             self.batch_norm = bool(kwargs['batchNorm'])
             self.FILE_TXT = self.FILE_TXT + "\nbatchNorm = " + str(self.batch_norm)
         else:
             self.batch_norm = False
             self.FILE_TXT = self.FILE_TXT + "\nbatchNorm = none"
 
-        if "maxNorm" in kwargs:
+        if "maxNorm" in kwargs:  # Maximum norm constraint for weights
             self.max_norm = int(kwargs['maxNorm'])
         else:
             self.max_norm = 1
         self.FILE_TXT = self.FILE_TXT + "\nMaxNorm = " + str(self.max_norm)
 
-        if "dropOut" in kwargs:
+        if "dropOut" in kwargs:  # Whether to use dropout to prevent overfitting
             self.drop_out = bool(kwargs['dropOut'])
             self.FILE_TXT = self.FILE_TXT + "\ndropOut = " + str(self.drop_out)
         else:
@@ -141,7 +141,7 @@ class ResUNet:
             self.FILE_TXT = self.FILE_TXT + "\ndropOut = none"
 
         if self.drop_out:
-            if "dropoutRate" in kwargs:
+            if "dropoutRate" in kwargs:  # Dropout rate for regularization
                 self.dropout_rate = float(kwargs['dropoutRate'])
             else:
                 self.dropout_rate = 0.1
@@ -150,25 +150,26 @@ class ResUNet:
             self.dropout_rate = None
             self.FILE_TXT = self.FILE_TXT + "\ndropoutRate = none"
 
-        if "dataGeneration" in kwargs:
+        if "dataGeneration" in kwargs:  # Whether to use data augmentation
             self.data_generation = bool(kwargs['dataGeneration'])
         else:
             self.data_generation = False
         self.FILE_TXT = self.FILE_TXT + "\ndataGeneration = " + str(self.data_generation)
 
-        if "additional_augmentation_factor" in kwargs:
+        if "additional_augmentation_factor" in kwargs:  # Factor for additional data augmentation
             self.additional_augmentation_factor = kwargs['additional_augmentation_factor']
         else:
             self.additional_augmentation_factor = 2
-        self.FILE_TXT = self.FILE_TXT + "\nadditional_augmentation_factor = " + str(self.additional_augmentation_factor)
+        self.FILE_TXT = self.FILE_TXT + "\nadditional_augmentation_factor = " + str(
+            self.additional_augmentation_factor)
 
-        if "patience" in kwargs:
+        if "patience" in kwargs:  # Number of epochs with no improvement after which training will be stopped
             self.patience = int(kwargs['patience'])
         else:
             self.patience = 5
         self.FILE_TXT = self.FILE_TXT + "\npatience = " + str(self.patience)
 
-        if "padding" in kwargs:
+        if "padding" in kwargs:  # Padding strategy for convolutional layers
             if kwargs['padding'] == "same" or kwargs['padding'] == "valid":
                 self.padding = kwargs['padding']
             else:
@@ -177,30 +178,31 @@ class ResUNet:
             self.padding = "same"
         self.FILE_TXT = self.FILE_TXT + "\npadding = " + str(self.padding)
 
-        if "pretrained" in kwargs:
+        if "pretrained" in kwargs:  # Whether to use a pretrained model
             self.pretrained = bool(kwargs['pretrained'])
-            if "backbone" in kwargs:
+            if "backbone" in kwargs:  # Backbone model to use if pretrained
                 self.backbone = str(kwargs['backbone'])
                 self.FILE_TXT = self.FILE_TXT + "\nbackbone= " + str(self.backbone)
         else:
             self.pretrained = False
         self.FILE_TXT = self.FILE_TXT + "\npretrained = " + str(self.pretrained)
 
-        if "img_height" in kwargs:
+        if "img_height" in kwargs:  # Height of the input images
             self.img_height = int(kwargs['img_height'])
         else:
             self.img_height = self.x_train.shape[1]
         self.FILE_TXT = self.FILE_TXT + "\nimg_height = " + str(self.img_height)
 
-        if "img_width" in kwargs:
+        if "img_width" in kwargs:  # Width of the input images
             self.img_width = int(kwargs['img_width'])
         else:
             self.img_width = self.x_train.shape[2]
         self.FILE_TXT = self.FILE_TXT + "\nimg_width = " + str(self.img_width)
+
         metrics_early_stopping = []
         metrics_early_stopping_tmp = []
-        if "metrics" in kwargs:
-            if "early_stopping" in kwargs:
+        if "metrics" in kwargs:  # Metrics to monitor during training
+            if "early_stopping" in kwargs:  # Metrics for early stopping
                 metrics_early_stopping = kwargs['early_stopping']
                 metrics_early_stopping_tmp = []
 
