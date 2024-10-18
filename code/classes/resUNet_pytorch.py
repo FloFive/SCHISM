@@ -7,7 +7,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 import matplotlib.pyplot as plt
-
+from util import Util
 
 
 class ResUNet:
@@ -389,8 +389,8 @@ class ResUNet:
 
         # Early stopping setup
         early_stopping = None
-        #if self.early_stopping:
-         #   early_stopping = EarlyStopping(patience=self.patience, verbose=1)
+        # if self.early_stopping:
+        #   early_stopping = EarlyStopping(patience=self.patience, verbose=1)
 
         # Data loaders
         if self.data_generation:
@@ -488,4 +488,3 @@ class ResUNet:
     # Example usage
     # res_unet = ResUNet(pathLogDir='logs', data=Util(), epochs=50, batch_size=8)
     # res_unet.run()
-
