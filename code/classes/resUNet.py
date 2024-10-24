@@ -6,21 +6,18 @@ Created on Tue Oct 11 14:45:14 2022
 """
 import os
 from datetime import datetime
-import keras
 import matplotlib.pyplot as plt
 import numpy as np
 import segmentation_models as sm
+import tensorflow.python.keras as keras
 from joblib import dump
 from keras import backend as kera
-from keras.preprocessing.image import ImageDataGenerator
-from tensorflow.keras import regularizers
-from tensorflow.keras.layers import add, \
-    Dropout, Conv2D, Conv2DTranspose, MaxPooling2D, concatenate, BatchNormalization, Activation
-from tensorflow.keras.losses import CategoricalFocalCrossentropy
-from tensorflow.keras.models import Model
-from tensorflow.keras.optimizers import Adam
+from keras._tf_keras.keras.preprocessing.image import ImageDataGenerator
+from keras import regularizers
+from tensorflow.python.keras.losses import CategoricalFocalCrossentropy
+from tensorflow.python.keras.models import Model
+from tensorflow.python.keras.optimizers import Adam
 from tensorflow.python.client import device_lib
-
 from util import Util
 
 
@@ -99,44 +96,44 @@ class ResUNet:
             else:
                 raise Exception(repr(self) + ' class - training and testing dataset must be provided')
 
-        if "epochs" in kwargs:
+        if "epochs" in kwargs:  # Total number of iterations over the entire training dataset
             self.epochs = int(kwargs['epochs'])
         else:
             self.epochs = 50
         self.FILE_TXT = self.FILE_TXT + "\nepochs = " + str(self.epochs)
 
-        if "batch_size" in kwargs:
+        if "batch_size" in kwargs:  # Number of samples per gradient update
             self.batch_size = int(kwargs['batch_size'])
         else:
             self.batch_size = 8
         self.FILE_TXT = self.FILE_TXT + "\nbatch_size = " + str(self.batch_size)
 
-        if "learningRate" in kwargs:
+        if "learningRate" in kwargs:  # Step size for updating the weights
             self.learning_rate = float(kwargs['learningRate'])
         else:
             self.learning_rate = 1e-5
         self.FILE_TXT = self.FILE_TXT + "\nlearningRate = " + str(self.learning_rate)
 
-        if "L2" in kwargs:
+        if "L2" in kwargs:  # L2 regularization factor to prevent overfitting
             self.L2 = float(kwargs['L2'])
         else:
             self.L2 = 1e-5
         self.FILE_TXT = self.FILE_TXT + "\nL2 = " + str(self.L2)
 
-        if "batchNorm" in kwargs:
+        if "batchNorm" in kwargs:  # Whether to use batch normalization
             self.batch_norm = bool(kwargs['batchNorm'])
             self.FILE_TXT = self.FILE_TXT + "\nbatchNorm = " + str(self.batch_norm)
         else:
             self.batch_norm = False
             self.FILE_TXT = self.FILE_TXT + "\nbatchNorm = none"
 
-        if "maxNorm" in kwargs:
+        if "maxNorm" in kwargs:  # Maximum norm constraint for weights
             self.max_norm = int(kwargs['maxNorm'])
         else:
             self.max_norm = 1
         self.FILE_TXT = self.FILE_TXT + "\nMaxNorm = " + str(self.max_norm)
 
-        if "dropOut" in kwargs:
+        if "dropOut" in kwargs:  # Whether to use dropout to prevent overfitting
             self.drop_out = bool(kwargs['dropOut'])
             self.FILE_TXT = self.FILE_TXT + "\ndropOut = " + str(self.drop_out)
         else:
@@ -144,7 +141,7 @@ class ResUNet:
             self.FILE_TXT = self.FILE_TXT + "\ndropOut = none"
 
         if self.drop_out:
-            if "dropoutRate" in kwargs:
+            if "dropoutRate" in kwargs:  # Dropout rate for regularization
                 self.dropout_rate = float(kwargs['dropoutRate'])
             else:
                 self.dropout_rate = 0.1
@@ -153,25 +150,26 @@ class ResUNet:
             self.dropout_rate = None
             self.FILE_TXT = self.FILE_TXT + "\ndropoutRate = none"
 
-        if "dataGeneration" in kwargs:
+        if "dataGeneration" in kwargs:  # Whether to use data augmentation
             self.data_generation = bool(kwargs['dataGeneration'])
         else:
             self.data_generation = False
         self.FILE_TXT = self.FILE_TXT + "\ndataGeneration = " + str(self.data_generation)
 
-        if "additional_augmentation_factor" in kwargs:
+        if "additional_augmentation_factor" in kwargs:  # Factor for additional data augmentation
             self.additional_augmentation_factor = kwargs['additional_augmentation_factor']
         else:
             self.additional_augmentation_factor = 2
-        self.FILE_TXT = self.FILE_TXT + "\nadditional_augmentation_factor = " + str(self.additional_augmentation_factor)
+        self.FILE_TXT = self.FILE_TXT + "\nadditional_augmentation_factor = " + str(
+            self.additional_augmentation_factor)
 
-        if "patience" in kwargs:
+        if "patience" in kwargs:  # Number of epochs with no improvement after which training will be stopped
             self.patience = int(kwargs['patience'])
         else:
             self.patience = 5
         self.FILE_TXT = self.FILE_TXT + "\npatience = " + str(self.patience)
 
-        if "padding" in kwargs:
+        if "padding" in kwargs:  # Padding strategy for convolutional layers
             if kwargs['padding'] == "same" or kwargs['padding'] == "valid":
                 self.padding = kwargs['padding']
             else:
@@ -180,30 +178,31 @@ class ResUNet:
             self.padding = "same"
         self.FILE_TXT = self.FILE_TXT + "\npadding = " + str(self.padding)
 
-        if "pretrained" in kwargs:
+        if "pretrained" in kwargs:  # Whether to use a pretrained model
             self.pretrained = bool(kwargs['pretrained'])
-            if "backbone" in kwargs:
+            if "backbone" in kwargs:  # Backbone model to use if pretrained
                 self.backbone = str(kwargs['backbone'])
                 self.FILE_TXT = self.FILE_TXT + "\nbackbone= " + str(self.backbone)
         else:
             self.pretrained = False
         self.FILE_TXT = self.FILE_TXT + "\npretrained = " + str(self.pretrained)
 
-        if "img_height" in kwargs:
+        if "img_height" in kwargs:  # Height of the input images
             self.img_height = int(kwargs['img_height'])
         else:
             self.img_height = self.x_train.shape[1]
         self.FILE_TXT = self.FILE_TXT + "\nimg_height = " + str(self.img_height)
 
-        if "img_width" in kwargs:
+        if "img_width" in kwargs:  # Width of the input images
             self.img_width = int(kwargs['img_width'])
         else:
             self.img_width = self.x_train.shape[2]
         self.FILE_TXT = self.FILE_TXT + "\nimg_width = " + str(self.img_width)
+
         metrics_early_stopping = []
         metrics_early_stopping_tmp = []
-        if "metrics" in kwargs:
-            if "early_stopping" in kwargs:
+        if "metrics" in kwargs:  # Metrics to monitor during training
+            if "early_stopping" in kwargs:  # Metrics for early stopping
                 metrics_early_stopping = kwargs['early_stopping']
                 metrics_early_stopping_tmp = []
 
@@ -287,11 +286,9 @@ class ResUNet:
         else:
             if self.num_class == 2:  # Binary
                 self.loss = self.weighted_binary_crossentropy()
-                # self.loss = BinaryCrossentropy(from_logits=True)
             else:  # Multiclass
                 self.loss = CategoricalFocalCrossentropy()
-                # self.loss = self.weighted_categorical_crossentropy()
-                # self.loss = CategoricalCrossentropy(from_logits=True)
+
         self.FILE_TXT = self.FILE_TXT + "\nLoss function = " + str(self.loss)
 
         if "displaySummary" in kwargs:
@@ -325,26 +322,12 @@ class ResUNet:
             seed (int): Random seed for data shuffling.
             batch_size (int): Number of samples per batch.
             is_train_set (bool): Whether the data is for training.
-            for_visualisation (bool): Whether the data is for visualization.
+            for_visualisation (bool): Whether the data is for visualisation.
 
         Yields:
             Tuple: A batch of input and output data.
         """
         if is_train_set:
-            '''
-            image_datagen = ImageDataGenerator(#featurewise_center=True,
-                                               #featurewise_std_normalization=True,
-                                               #zca_whitening=True,
-                                               rotation_range=360,
-                                               width_shift_range=0.5,
-                                               height_shift_range=0.5,
-                                               horizontal_flip=True,
-                                               vertical_flip=True,
-                                               shear_range=0.5,
-                                               #zoom_range=0.5,
-                                               fill_mode='reflect')
-            '''
-            # TO TEST
             image_datagen = ImageDataGenerator(rotation_range=15,  # Rotate images up to 15 degrees
                                                width_shift_range=0.1,  # Shift width by up to 10%
                                                height_shift_range=0.1,  # Shift height by up to 10%
@@ -354,15 +337,19 @@ class ResUNet:
                                                fill_mode='reflect'  # Fill mode
                                                )
             image_datagen.fit(self.x_train)
-            gen_x1 = image_datagen.flow(self.x_train, self.y_train, batch_size=batch_size, seed=seed, shuffle=is_train_set)
+            gen_x1 = image_datagen.flow(self.x_train, self.y_train, batch_size=batch_size, seed=seed,
+                                        shuffle=is_train_set)
             image_datagen.fit(self.y_train)
-            gen_x2 = image_datagen.flow(self.y_train, self.x_train, batch_size=batch_size, seed=seed, shuffle=is_train_set)
+            gen_x2 = image_datagen.flow(self.y_train, self.x_train, batch_size=batch_size, seed=seed,
+                                        shuffle=is_train_set)
         else:
             image_datagen = ImageDataGenerator()
             image_datagen.fit(self.x_train)
-            gen_x1 = image_datagen.flow(self.x_train, self.y_train, batch_size=batch_size, seed=seed, shuffle=is_train_set)
+            gen_x1 = image_datagen.flow(self.x_train, self.y_train, batch_size=batch_size, seed=seed,
+                                        shuffle=is_train_set)
             image_datagen.fit(self.y_train)
-            gen_x2 = image_datagen.flow(self.y_train, self.x_train, batch_size=batch_size, seed=seed, shuffle=is_train_set)
+            gen_x2 = image_datagen.flow(self.y_train, self.x_train, batch_size=batch_size, seed=seed,
+                                        shuffle=is_train_set)
 
         while True:
             if for_visualisation:
@@ -394,9 +381,10 @@ class ResUNet:
 
         return loss
 
-    def weighted_binary_crossentropy(
-            self):  # taken from https://github.com/huanglau/Keras-Weighted-Binary-Cross-Entropy/blob/master/DynCrossEntropy.py
+    def weighted_binary_crossentropy(self):
+        # taken from https://github.com/huanglau/Keras-Weighted-Binary-Cross-Entropy/blob/master/DynCrossEntropy.py
         """Returns a weighted binary crossentropy loss function."""
+
         def loss(y_true, y_pred):
             # calculate the binary cross entropy
             bin_crossentropy = kera.binary_crossentropy(y_true, y_pred)
@@ -422,35 +410,18 @@ class ResUNet:
                 Tensor after applying batch normalization, ReLU activation, and optional dropout.
             """
             if self.batch_norm and self.drop_out:
-                x = BatchNormalization()(x)
-                x = Activation("relu")(x)
-                x = Dropout(self.dropout_rate)(x)
+                x = keras.layers.BatchNormalization()(x)
+                x = keras.layers.Activation("relu")(x)
+                x = keras.layers.Dropout(self.dropout_rate)(x)
             elif self.batch_norm and not self.drop_out:
-                x = BatchNormalization()(x)
-                x = Activation("relu")(x)
+                x = keras.layers.BatchNormalization()(x)
+                x = keras.layers.Activation("relu")(x)
             elif not self.batch_norm and self.drop_out:
-                x = Activation("relu")(x)
-                x = Dropout(self.dropout_rate)(x)
+                x = keras.layers.Activation("relu")(x)
+                x = keras.layers.Dropout(self.dropout_rate)(x)
             else:
-                x = Activation("relu")(x)
+                x = keras.layers.Activation("relu")(x)
             return x
-
-        '''
-        def decoder(inputLayer, i, lvl):
-            deconv = Conv2DTranspose(self.featuremaps * i, (2, 2), strides=(2, 2), padding=self.padding, kernel_regularizer=regularizers.L2(l2=self.L2), kernel_constraint=keras.constraints.max_norm(self.maxNorm))(inputLayer)
-            uconv = concatenate([deconv, layerList[lvl]])
-            uconv = Conv2D(self.featuremaps * i, (2, 2), padding=self.padding, kernel_regularizer=regularizers.L2(l2=self.L2), kernel_constraint=keras.constraints.max_norm(self.maxNorm))(uconv)
-            uconv = batch_Norm_Activation(uconv)
-            shortcut = Conv2D(self.featuremaps * i, (3, 3), padding=self.padding, kernel_regularizer=regularizers.L2(l2=self.L2), kernel_constraint=keras.constraints.max_norm(self.maxNorm))(uconv)
-            shortcut = batch_Norm_Activation(shortcut)
-            uconv = Conv2D(self.featuremaps * i, (2, 2), padding=self.padding, kernel_regularizer=regularizers.L2(l2=self.L2), kernel_constraint=keras.constraints.max_norm(self.maxNorm))(uconv)
-            uconv = batch_Norm_Activation(uconv)
-            uconv = Conv2D(self.featuremaps * i, (2, 2), padding=self.padding, kernel_regularizer=regularizers.L2(l2=self.L2), kernel_constraint=keras.constraints.max_norm(self.maxNorm))(uconv)
-            uconv = batch_Norm_Activation(uconv)
-            outputLayer = add([shortcut, uconv])
-            return outputLayer
-        '''
-        # channelTmp =  self.Xtrain.shape[-1]
 
         if self.pretrained:
 
@@ -476,183 +447,183 @@ class ResUNet:
         else:
             inputs = keras.layers.Input(shape=(self.img_height, self.img_width, self.x_train.shape[-1]))
             # Architecture borrowed from https://github.com/AhadMomin/semantic-segmentation-digital-rock-physics
-            conv1 = Conv2D(self.featuremaps * 1, (3, 3), padding=self.padding,
-                           kernel_regularizer=regularizers.L2(l2=self.L2),
-                           kernel_constraint=keras.constraints.max_norm(self.max_norm))(inputs)
+            conv1 = keras.layers.Conv2D(self.featuremaps * 1, (3, 3), padding=self.padding,
+                                        kernel_regularizer=regularizers.L2(l2=self.L2),
+                                        kernel_constraint=keras.constraints.max_norm(self.max_norm))(inputs)
             conv1 = batch_norm_activation(conv1)
-            conv1 = Conv2D(self.featuremaps * 1, (3, 3), padding=self.padding,
-                           kernel_regularizer=regularizers.L2(l2=self.L2),
-                           kernel_constraint=keras.constraints.max_norm(self.max_norm))(conv1)
+            conv1 = keras.layers.Conv2D(self.featuremaps * 1, (3, 3), padding=self.padding,
+                                        kernel_regularizer=regularizers.L2(l2=self.L2),
+                                        kernel_constraint=keras.constraints.max_norm(self.max_norm))(conv1)
             conv1 = batch_norm_activation(conv1)
-            pool1 = MaxPooling2D((2, 2))(conv1)
+            pool1 = keras.layers.MaxPooling2D((2, 2))(conv1)
 
-            conv2 = Conv2D(self.featuremaps * 2, (3, 3), padding=self.padding,
-                           kernel_regularizer=regularizers.L2(l2=self.L2),
-                           kernel_constraint=keras.constraints.max_norm(self.max_norm))(pool1)
+            conv2 = keras.layers.Conv2D(self.featuremaps * 2, (3, 3), padding=self.padding,
+                                        kernel_regularizer=regularizers.L2(l2=self.L2),
+                                        kernel_constraint=keras.constraints.max_norm(self.max_norm))(pool1)
             conv22 = batch_norm_activation(conv2)
-            shortcut = Conv2D(self.featuremaps * 2, (3, 3), padding=self.padding,
-                              kernel_regularizer=regularizers.L2(l2=self.L2),
-                              kernel_constraint=keras.constraints.max_norm(self.max_norm))(conv22)
+            shortcut = keras.layers.Conv2D(self.featuremaps * 2, (3, 3), padding=self.padding,
+                                           kernel_regularizer=regularizers.L2(l2=self.L2),
+                                           kernel_constraint=keras.constraints.max_norm(self.max_norm))(conv22)
             shortcut = batch_norm_activation(shortcut)
-            conv2 = Conv2D(self.featuremaps * 2, (3, 3), padding=self.padding,
-                           kernel_regularizer=regularizers.L2(l2=self.L2),
-                           kernel_constraint=keras.constraints.max_norm(self.max_norm))(conv22)
+            conv2 = keras.layers.Conv2D(self.featuremaps * 2, (3, 3), padding=self.padding,
+                                        kernel_regularizer=regularizers.L2(l2=self.L2),
+                                        kernel_constraint=keras.constraints.max_norm(self.max_norm))(conv22)
             conv2 = batch_norm_activation(conv2)
-            conv2 = Conv2D(self.featuremaps * 2, (3, 3), padding=self.padding,
-                           kernel_regularizer=regularizers.L2(l2=self.L2),
-                           kernel_constraint=keras.constraints.max_norm(self.max_norm))(conv2)
+            conv2 = keras.layers.Conv2D(self.featuremaps * 2, (3, 3), padding=self.padding,
+                                        kernel_regularizer=regularizers.L2(l2=self.L2),
+                                        kernel_constraint=keras.constraints.max_norm(self.max_norm))(conv2)
             conv2 = batch_norm_activation(conv2)
-            conv2 = add([shortcut, conv2])
-            pool2 = MaxPooling2D((2, 2))(conv2)
+            conv2 = keras.layers.add([shortcut, conv2])
+            pool2 = keras.layers.MaxPooling2D((2, 2))(conv2)
 
-            conv3 = Conv2D(self.featuremaps * 4, (3, 3), padding=self.padding,
-                           kernel_regularizer=regularizers.L2(l2=self.L2),
-                           kernel_constraint=keras.constraints.max_norm(self.max_norm))(pool2)
+            conv3 = keras.layers.Conv2D(self.featuremaps * 4, (3, 3), padding=self.padding,
+                                        kernel_regularizer=regularizers.L2(l2=self.L2),
+                                        kernel_constraint=keras.constraints.max_norm(self.max_norm))(pool2)
             conv33 = batch_norm_activation(conv3)
-            shortcut1 = Conv2D(self.featuremaps * 4, (3, 3), padding=self.padding,
-                               kernel_regularizer=regularizers.L2(l2=self.L2),
-                               kernel_constraint=keras.constraints.max_norm(self.max_norm))(conv33)
+            shortcut1 = keras.layers.Conv2D(self.featuremaps * 4, (3, 3), padding=self.padding,
+                                            kernel_regularizer=regularizers.L2(l2=self.L2),
+                                            kernel_constraint=keras.constraints.max_norm(self.max_norm))(conv33)
             shortcut1 = batch_norm_activation(shortcut1)
-            conv3 = Conv2D(self.featuremaps * 4, (3, 3), padding=self.padding,
-                           kernel_regularizer=regularizers.L2(l2=self.L2),
-                           kernel_constraint=keras.constraints.max_norm(self.max_norm))(conv33)
+            conv3 = keras.layers.Conv2D(self.featuremaps * 4, (3, 3), padding=self.padding,
+                                        kernel_regularizer=regularizers.L2(l2=self.L2),
+                                        kernel_constraint=keras.constraints.max_norm(self.max_norm))(conv33)
             conv3 = batch_norm_activation(conv3)
-            conv3 = Conv2D(self.featuremaps * 4, (3, 3), padding=self.padding,
-                           kernel_regularizer=regularizers.L2(l2=self.L2),
-                           kernel_constraint=keras.constraints.max_norm(self.max_norm))(conv3)
+            conv3 = keras.layers.Conv2D(self.featuremaps * 4, (3, 3), padding=self.padding,
+                                        kernel_regularizer=regularizers.L2(l2=self.L2),
+                                        kernel_constraint=keras.constraints.max_norm(self.max_norm))(conv3)
             conv3 = batch_norm_activation(conv3)
-            conv3 = add([shortcut1, conv3])
-            pool3 = MaxPooling2D((2, 2))(conv3)
+            conv3 = keras.layers.add([shortcut1, conv3])
+            pool3 = keras.layers.MaxPooling2D((2, 2))(conv3)
 
-            conv4 = Conv2D(self.featuremaps * 8, (3, 3), padding=self.padding,
-                           kernel_regularizer=regularizers.L2(l2=self.L2),
-                           kernel_constraint=keras.constraints.max_norm(self.max_norm))(pool3)
+            conv4 = keras.layers.Conv2D(self.featuremaps * 8, (3, 3), padding=self.padding,
+                                        kernel_regularizer=regularizers.L2(l2=self.L2),
+                                        kernel_constraint=keras.constraints.max_norm(self.max_norm))(pool3)
             conv44 = batch_norm_activation(conv4)
-            shortcut2 = Conv2D(self.featuremaps * 8, (3, 3), padding=self.padding,
-                               kernel_regularizer=regularizers.L2(l2=self.L2),
-                               kernel_constraint=keras.constraints.max_norm(self.max_norm))(conv44)
+            shortcut2 = keras.layers.Conv2D(self.featuremaps * 8, (3, 3), padding=self.padding,
+                                            kernel_regularizer=regularizers.L2(l2=self.L2),
+                                            kernel_constraint=keras.constraints.max_norm(self.max_norm))(conv44)
             shortcut2 = batch_norm_activation(shortcut2)
-            conv4 = Conv2D(self.featuremaps * 8, (3, 3), padding=self.padding,
-                           kernel_regularizer=regularizers.L2(l2=self.L2),
-                           kernel_constraint=keras.constraints.max_norm(self.max_norm))(conv44)
+            conv4 = keras.layers.Conv2D(self.featuremaps * 8, (3, 3), padding=self.padding,
+                                        kernel_regularizer=regularizers.L2(l2=self.L2),
+                                        kernel_constraint=keras.constraints.max_norm(self.max_norm))(conv44)
             conv4 = batch_norm_activation(conv4)
-            conv4 = Conv2D(self.featuremaps * 8, (3, 3), padding=self.padding,
-                           kernel_regularizer=regularizers.L2(l2=self.L2),
-                           kernel_constraint=keras.constraints.max_norm(self.max_norm))(conv4)
+            conv4 = keras.layers.Conv2D(self.featuremaps * 8, (3, 3), padding=self.padding,
+                                        kernel_regularizer=regularizers.L2(l2=self.L2),
+                                        kernel_constraint=keras.constraints.max_norm(self.max_norm))(conv4)
             conv4 = batch_norm_activation(conv4)
-            conv4 = add([shortcut2, conv4])
-            pool4 = MaxPooling2D((2, 2))(conv4)
+            conv4 = keras.layers.add([shortcut2, conv4])
+            pool4 = keras.layers.MaxPooling2D((2, 2))(conv4)
 
-            convm = Conv2D(self.featuremaps * 16, (3, 3), padding=self.padding,
-                           kernel_regularizer=regularizers.L2(l2=self.L2),
-                           kernel_constraint=keras.constraints.max_norm(self.max_norm))(pool4)
+            convm = keras.layers.Conv2D(self.featuremaps * 16, (3, 3), padding=self.padding,
+                                        kernel_regularizer=regularizers.L2(l2=self.L2),
+                                        kernel_constraint=keras.constraints.max_norm(self.max_norm))(pool4)
             convm = batch_norm_activation(convm)
-            shortcut3 = Conv2D(self.featuremaps * 16, (3, 3), padding=self.padding,
-                               kernel_regularizer=regularizers.L2(l2=self.L2),
-                               kernel_constraint=keras.constraints.max_norm(self.max_norm))(convm)
+            shortcut3 = keras.layers.Conv2D(self.featuremaps * 16, (3, 3), padding=self.padding,
+                                            kernel_regularizer=regularizers.L2(l2=self.L2),
+                                            kernel_constraint=keras.constraints.max_norm(self.max_norm))(convm)
             shortcut3 = batch_norm_activation(shortcut3)
-            convm = Conv2D(self.featuremaps * 16, (3, 3), padding=self.padding,
-                           kernel_regularizer=regularizers.L2(l2=self.L2),
-                           kernel_constraint=keras.constraints.max_norm(self.max_norm))(convm)
+            convm = keras.layers.Conv2D(self.featuremaps * 16, (3, 3), padding=self.padding,
+                                        kernel_regularizer=regularizers.L2(l2=self.L2),
+                                        kernel_constraint=keras.constraints.max_norm(self.max_norm))(convm)
             convm = batch_norm_activation(convm)
-            convm = Conv2D(self.featuremaps * 16, (3, 3), padding=self.padding,
-                           kernel_regularizer=regularizers.L2(l2=self.L2),
-                           kernel_constraint=keras.constraints.max_norm(self.max_norm))(convm)
+            convm = keras.layers.Conv2D(self.featuremaps * 16, (3, 3), padding=self.padding,
+                                        kernel_regularizer=regularizers.L2(l2=self.L2),
+                                        kernel_constraint=keras.constraints.max_norm(self.max_norm))(convm)
             convm = batch_norm_activation(convm)
-            convm = add([shortcut3, convm])
+            convm = keras.layers.add([shortcut3, convm])
 
-            deconv4 = Conv2DTranspose(self.featuremaps * 8, (2, 2), strides=(2, 2), padding=self.padding,
-                                      kernel_regularizer=regularizers.L2(l2=self.L2),
-                                      kernel_constraint=keras.constraints.max_norm(self.max_norm))(convm)
-            uconv4 = concatenate([deconv4, conv4])
-            uconv4 = Conv2D(self.featuremaps * 8, (2, 2), padding=self.padding,
-                            kernel_regularizer=regularizers.L2(l2=self.L2),
-                            kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv4)
+            deconv4 = keras.layers.Conv2DTranspose(self.featuremaps * 8, (2, 2), strides=(2, 2), padding=self.padding,
+                                                   kernel_regularizer=regularizers.L2(l2=self.L2),
+                                                   kernel_constraint=keras.constraints.max_norm(self.max_norm))(convm)
+            uconv4 = keras.layers.concatenate([deconv4, conv4])
+            uconv4 = keras.layers.Conv2D(self.featuremaps * 8, (2, 2), padding=self.padding,
+                                         kernel_regularizer=regularizers.L2(l2=self.L2),
+                                         kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv4)
             uconv4 = batch_norm_activation(uconv4)
-            shortcut4 = Conv2D(self.featuremaps * 8, (3, 3), padding=self.padding,
-                               kernel_regularizer=regularizers.L2(l2=self.L2),
-                               kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv4)
+            shortcut4 = keras.layers.Conv2D(self.featuremaps * 8, (3, 3), padding=self.padding,
+                                            kernel_regularizer=regularizers.L2(l2=self.L2),
+                                            kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv4)
             shortcut4 = batch_norm_activation(shortcut4)
-            uconv4 = Conv2D(self.featuremaps * 8, (2, 2), padding=self.padding,
-                            kernel_regularizer=regularizers.L2(l2=self.L2),
-                            kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv4)
+            uconv4 = keras.layers.Conv2D(self.featuremaps * 8, (2, 2), padding=self.padding,
+                                         kernel_regularizer=regularizers.L2(l2=self.L2),
+                                         kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv4)
             uconv4 = batch_norm_activation(uconv4)
-            uconv4 = Conv2D(self.featuremaps * 8, (2, 2), padding=self.padding,
-                            kernel_regularizer=regularizers.L2(l2=self.L2),
-                            kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv4)
+            uconv4 = keras.layers.Conv2D(self.featuremaps * 8, (2, 2), padding=self.padding,
+                                         kernel_regularizer=regularizers.L2(l2=self.L2),
+                                         kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv4)
             uconv4 = batch_norm_activation(uconv4)
-            uconv4 = add([shortcut4, uconv4])
+            uconv4 = keras.layers.add([shortcut4, uconv4])
 
-            deconv3 = Conv2DTranspose(self.featuremaps * 4, (2, 2), strides=(2, 2), padding=self.padding,
-                                      kernel_regularizer=regularizers.L2(l2=self.L2),
-                                      kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv4)
-            uconv3 = concatenate([deconv3, conv3])
-            uconv3 = Conv2D(self.featuremaps * 4, (2, 2), padding=self.padding,
-                            kernel_regularizer=regularizers.L2(l2=self.L2),
-                            kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv3)
+            deconv3 = keras.layers.Conv2DTranspose(self.featuremaps * 4, (2, 2), strides=(2, 2), padding=self.padding,
+                                                   kernel_regularizer=regularizers.L2(l2=self.L2),
+                                                   kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv4)
+            uconv3 = keras.layers.concatenate([deconv3, conv3])
+            uconv3 = keras.layers.Conv2D(self.featuremaps * 4, (2, 2), padding=self.padding,
+                                         kernel_regularizer=regularizers.L2(l2=self.L2),
+                                         kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv3)
             uconv3 = batch_norm_activation(uconv3)
-            shortcut5 = Conv2D(self.featuremaps * 4, (3, 3), padding=self.padding,
-                               kernel_regularizer=regularizers.L2(l2=self.L2),
-                               kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv3)
+            shortcut5 = keras.layers.Conv2D(self.featuremaps * 4, (3, 3), padding=self.padding,
+                                            kernel_regularizer=regularizers.L2(l2=self.L2),
+                                            kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv3)
             shortcut5 = batch_norm_activation(shortcut5)
-            uconv3 = Conv2D(self.featuremaps * 4, (2, 2), padding=self.padding,
-                            kernel_regularizer=regularizers.L2(l2=self.L2),
-                            kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv3)
+            uconv3 = keras.layers.Conv2D(self.featuremaps * 4, (2, 2), padding=self.padding,
+                                         kernel_regularizer=regularizers.L2(l2=self.L2),
+                                         kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv3)
             uconv3 = batch_norm_activation(uconv3)
-            uconv3 = Conv2D(self.featuremaps * 4, (2, 2), padding=self.padding,
-                            kernel_regularizer=regularizers.L2(l2=self.L2),
-                            kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv3)
+            uconv3 = keras.layers.Conv2D(self.featuremaps * 4, (2, 2), padding=self.padding,
+                                         kernel_regularizer=regularizers.L2(l2=self.L2),
+                                         kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv3)
             uconv3 = batch_norm_activation(uconv3)
-            uconv3 = add([shortcut5, uconv3])
+            uconv3 = keras.layers.add([shortcut5, uconv3])
 
-            deconv2 = Conv2DTranspose(self.featuremaps * 2, (2, 2), strides=(2, 2), padding=self.padding,
-                                      kernel_regularizer=regularizers.L2(l2=self.L2),
-                                      kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv3)
-            uconv2 = concatenate([deconv2, conv2])
-            uconv2 = Conv2D(self.featuremaps * 2, (2, 2), padding=self.padding,
-                            kernel_regularizer=regularizers.L2(l2=self.L2),
-                            kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv2)
+            deconv2 = keras.layers.Conv2DTranspose(self.featuremaps * 2, (2, 2), strides=(2, 2), padding=self.padding,
+                                                   kernel_regularizer=regularizers.L2(l2=self.L2),
+                                                   kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv3)
+            uconv2 = keras.layers.concatenate([deconv2, conv2])
+            uconv2 = keras.layers.Conv2D(self.featuremaps * 2, (2, 2), padding=self.padding,
+                                         kernel_regularizer=regularizers.L2(l2=self.L2),
+                                         kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv2)
             uconv2 = batch_norm_activation(uconv2)
-            shortcut6 = Conv2D(self.featuremaps * 2, (3, 3), padding=self.padding,
-                               kernel_regularizer=regularizers.L2(l2=self.L2),
-                               kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv2)
+            shortcut6 = keras.layers.Conv2D(self.featuremaps * 2, (3, 3), padding=self.padding,
+                                            kernel_regularizer=regularizers.L2(l2=self.L2),
+                                            kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv2)
             shortcut6 = batch_norm_activation(shortcut6)
-            uconv2 = Conv2D(self.featuremaps * 2, (2, 2), padding=self.padding,
-                            kernel_regularizer=regularizers.L2(l2=self.L2),
-                            kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv2)
+            uconv2 = keras.layers.Conv2D(self.featuremaps * 2, (2, 2), padding=self.padding,
+                                         kernel_regularizer=regularizers.L2(l2=self.L2),
+                                         kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv2)
             uconv2 = batch_norm_activation(uconv2)
-            uconv2 = Conv2D(self.featuremaps * 2, (2, 2), padding=self.padding,
-                            kernel_regularizer=regularizers.L2(l2=self.L2),
-                            kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv2)
+            uconv2 = keras.layers.Conv2D(self.featuremaps * 2, (2, 2), padding=self.padding,
+                                         kernel_regularizer=regularizers.L2(l2=self.L2),
+                                         kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv2)
             uconv2 = batch_norm_activation(uconv2)
-            uconv2 = add([shortcut6, uconv2])
+            uconv2 = keras.layers.add([shortcut6, uconv2])
 
-            deconv1 = Conv2DTranspose(self.featuremaps * 1, (2, 2), strides=(2, 2), padding=self.padding,
-                                      kernel_regularizer=regularizers.L2(l2=self.L2),
-                                      kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv2)
-            uconv1 = concatenate([deconv1, conv1])
-            uconv1 = Conv2D(self.featuremaps * 1, (2, 2), padding=self.padding,
-                            kernel_regularizer=regularizers.L2(l2=self.L2),
-                            kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv1)
+            deconv1 = keras.layers.Conv2DTranspose(self.featuremaps * 1, (2, 2), strides=(2, 2), padding=self.padding,
+                                                   kernel_regularizer=regularizers.L2(l2=self.L2),
+                                                   kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv2)
+            uconv1 = keras.layers.concatenate([deconv1, conv1])
+            uconv1 = keras.layers.Conv2D(self.featuremaps * 1, (2, 2), padding=self.padding,
+                                         kernel_regularizer=regularizers.L2(l2=self.L2),
+                                         kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv1)
             uconv1 = batch_norm_activation(uconv1)
-            shortcut7 = Conv2D(self.featuremaps * 1, (3, 3), padding=self.padding,
-                               kernel_regularizer=regularizers.L2(l2=self.L2),
-                               kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv1)
+            shortcut7 = keras.layers.Conv2D(self.featuremaps * 1, (3, 3), padding=self.padding,
+                                            kernel_regularizer=regularizers.L2(l2=self.L2),
+                                            kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv1)
             shortcut7 = batch_norm_activation(shortcut7)
-            uconv1 = Conv2D(self.featuremaps * 1, (2, 2), padding=self.padding,
-                            kernel_regularizer=regularizers.L2(l2=self.L2),
-                            kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv1)
+            uconv1 = keras.layers.Conv2D(self.featuremaps * 1, (2, 2), padding=self.padding,
+                                         kernel_regularizer=regularizers.L2(l2=self.L2),
+                                         kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv1)
             uconv1 = batch_norm_activation(uconv1)
-            uconv1 = Conv2D(self.featuremaps * 1, (2, 2), padding=self.padding,
-                            kernel_regularizer=regularizers.L2(l2=self.L2),
-                            kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv1)
+            uconv1 = keras.layers.Conv2D(self.featuremaps * 1, (2, 2), padding=self.padding,
+                                         kernel_regularizer=regularizers.L2(l2=self.L2),
+                                         kernel_constraint=keras.constraints.max_norm(self.max_norm))(uconv1)
             uconv1 = batch_norm_activation(uconv1)
-            uconv1 = add([shortcut7, uconv1])
+            uconv1 = keras.layers.add([shortcut7, uconv1])
 
             if self.num_class > 2:
-                final = Conv2D(self.num_class, (1, 1), padding=self.padding, activation='softmax')(uconv1)
+                final = keras.layers.Conv2D(self.num_class, (1, 1), padding=self.padding, activation='softmax')(uconv1)
             elif self.num_class <= 2:
-                final = Conv2D(1, (1, 1), padding=self.padding, activation='sigmoid')(uconv1)
+                final = keras.layers.Conv2D(1, (1, 1), padding=self.padding, activation='sigmoid')(uconv1)
 
             self.model = Model(inputs, final)
 
@@ -663,8 +634,7 @@ class ResUNet:
         """Compiles and trains the model, with options for data augmentation and early stopping."""
         global steps_per_epoch, validation_steps
         callbacks = []
-        # tensorboard = keras.callbacks.TensorBoard(log_dir= self.logdir)
-        # clr_triangular = CyclicLR(mode='triangular')
+
         if len(self.early_stopping) > 0:
             for early_stopping in self.early_stopping:
                 early_stopping_tmp = keras.callbacks.EarlyStopping(monitor=early_stopping, mode='max', verbose=1,
@@ -674,23 +644,6 @@ class ResUNet:
             early_stopping_loss = keras.callbacks.EarlyStopping(monitor='val_loss', mode='min', verbose=1,
                                                                 patience=self.patience, restore_best_weights=True)
             callbacks.append(early_stopping_loss)
-        """
-        if len(self.early_stopping) > 0:
-            print(self.early_stopping)
-            i=0
-            for early_stopping in self.early_stopping:
-                name_metric = 'metric_' + str(i)
-                early_stopping = keras.callbacks.EarlyStopping(monitor='binary_iou', patience=self.patience, restore_best_weights=True)
-                i+=1
-                callbacks.append(early_stopping)
-        if self.loss_early_stopping:
-            early_stopping_loss = keras.callbacks.EarlyStopping(monitor='val_loss', patience=self.patience, restore_best_weights=True)
-            callbacks.append(early_stopping_loss)
-        """
-        # earlyStoppingValAcc=keras.callbacks.EarlyStopping(monitor='val_accuracy', mode='max',verbose=1, patience=self.patience)
-        # earlyStoppingValLoss=keras.callbacks.EarlyStopping(monitor='val_loss', mode='min',verbose=1, patience=self.patience)
-        # reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, min_lr=1e-5)
-        # lr_finder = LRFinder(min_lr=1e-5, max_lr=1)
 
         print('gpu : ' + str(len(self.num_gpus)))
         if len(self.num_gpus) > 0:
@@ -699,7 +652,7 @@ class ResUNet:
         elif len(self.num_gpus) == 0:
             steps_per_epoch = self.x_train.shape[0] // self.batch_size
             validation_steps = self.x_test.shape[0] // self.batch_size
-        # TODO
+
         if self.data_generation:
             batch_size_val = self.batch_size // 2
 
@@ -768,5 +721,3 @@ class ResUNet:
                     json_file.write(model_json)
                     self.model.save_weights(os.path.join(new_path, 'weights.h5'))
                     self.model.save(new_path)
-
-        # return self.model
