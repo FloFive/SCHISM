@@ -1,27 +1,14 @@
+
 import os
-import sys
-import random
 import numpy as np
-from tqdm import tqdm
-import cv2
-import matplotlib.pyplot as plt
-from datetime import datetime
 import torch
 import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-from torch.optim.lr_scheduler import CosineAnnealingLR
-from torch.utils.data import DataLoader, random_split
+import torch.nn.functional as func_torch
+from torch.utils.data import DataLoader
 import torchvision
-from torchvision import datasets, transforms
 from torchvision.datasets import VisionDataset
-import torchvision.transforms.functional as Fv
-import torchmetrics
-from torchmetrics import JaccardIndex
-from transformers import get_scheduler
+import torchvision.transforms.functional as func_tv
 from PIL import Image  # Importer Pillow pour charger les images TIF
-import torchmetrics
-from torchmetrics import JaccardIndex
 
 # Define the project directory path
 project_dir = '/content/gdrive/MyDrive/'
@@ -90,7 +77,8 @@ class UnetSegmentor(nn.Module):
                     kernel_size (int): Size of the convolutional kernel.
 
                 Returns:
-                    nn.Sequential: A sequential block containing convolutional layers, batch normalization, and ReLU activation.
+                    nn.Sequential: A sequential block containing convolutional layers,
+                     batch normalization, and ReLU activation.
         """
         return nn.Sequential(
             nn.Conv2d(channels, channels*2, kernel_size=kernel_size, padding=1),
@@ -110,7 +98,8 @@ class UnetSegmentor(nn.Module):
                   kernel_size (int): Size of the convolutional kernel.
 
               Returns:
-                  nn.Sequential: A sequential block containing convolutional layers, batch normalization, and ReLU activation.
+                  nn.Sequential: A sequential block containing convolutional layers,
+                   batch normalization, and ReLU activation.
         """
         return nn.Sequential(
             nn.Conv2d(channels, channels, kernel_size=kernel_size, padding=1),
@@ -135,19 +124,19 @@ class UnetSegmentor(nn.Module):
         feature_list = []
         x = self.input_conv(x)
         feature_list.append(x)
-        x = F.max_pool2d(x, kernel_size=2)
-        x = F.dropout(x, p=self.p)
+        x = func_torch.max_pool2d(x, kernel_size=2)
+        x = func_torch.dropout(x, p=self.p)
         for i in range(self.n_blocks-1):
             x = self.encoder_convs[i](x)
             feature_list.append(x)
-            x = F.max_pool2d(x, kernel_size=2)
-            x = F.dropout(x, p=self.p)
+            x = func_torch.max_pool2d(x, kernel_size=2)
+            x = func_torch.dropout(x, p=self.p)
 
         x = self.mid_conv(x)
 
         for i in range(self.n_blocks):
             x = self.decoder_deconvs[i](x)
-            x = F.dropout(x, p=self.p)
+            x = func_torch.dropout(x, p=self.p)
             x = self.decoder_convs[i](x + feature_list[::-1][i])
 
         return self.seg_conv(x)
@@ -217,14 +206,14 @@ class EfficientSegmentationDataset(VisionDataset):
             img = torch.from_numpy(img.transpose((2, 0, 1))).contiguous() / 255.0
             mask = torch.from_numpy(mask).contiguous() / 255.0
 
-            img = F.interpolate(
+            img = func_torch.interpolate(
                 input=img.unsqueeze(0),
                 size=(self.IMG_RES, self.IMG_RES),
                 mode="bicubic",
                 align_corners=False
             ).squeeze()
 
-            mask = F.interpolate(
+            mask = func_torch.interpolate(
                 input=mask.unsqueeze(0).unsqueeze(0),
                 size=(self.IMG_RES, self.IMG_RES),
                 mode="nearest"

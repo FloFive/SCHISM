@@ -5,13 +5,13 @@ Created on Tue Nov 15 16:33:49 2022
 """
 import random
 import numpy as np
-from numpy import ndarray, histogram
+from numpy import histogram
 from numpy.core.multiarray import ndarray
 from skimage.exposure import equalize_adapthist, match_histograms, rescale_intensity, adjust_log
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 from .stack import Stack
-from .ProgressBar import ProgressBar
+from code.Backup.ProgressBar import ProgressBar
 import matplotlib.pyplot as plt
 import skimage.exposure as expo
 
@@ -361,41 +361,41 @@ class Util:
         return np.array(output)  # Convert the output list to a NumPy array and return it
 
 
-# Function to perform gamma adjustment on a dataset of 3D cubes
-def adjust_gamma(dataset, gamma_value=1.0):
-    """
-       Performs gamma adjustment on a dataset of 3D cubes.
-       Parameters:
-           dataset (list or numpy.ndarray): The dataset containing the image cubes.
-           gamma_value (float): The gamma value to use for the adjustment. Default is 1.0.
-       Returns:
-           numpy.ndarray: An array containing the gamma-adjusted image cubes.
-       """
-    preview = True  # A boolean variable to control display of test images
-    output = []  # Create an empty list to store the equalized cubes
-    for img in dataset:  # Iterate over each cube in the input dataset
-        matched = expo.adjust_gamma(img, gamma_value)  # Apply histogram equalization using equalize_hist() function
-        output.append(matched)  # Append the equalized cube to the output list
-        if preview:  # If test is True, display a comparison of original and equalized cube images
-            fig, axes = plt.subplots(1, 2)
-            axes[0].imshow(img, cmap='gray')
-            axes[0].set_title('Original', fontsize=10)
-            axes[1].imshow(matched, cmap='gray')
-            axes[1].set_title('Gamma adjusted (γ = {})'.format(gamma_value), fontsize=10)
-            plt.show()
-            preview = False
-    return numpy.ndarray(output)  # Convert the output list to a NumPy array and return it
+    # Function to perform gamma adjustment on a dataset of 3D cubes
+    def adjust_gamma(dataset, gamma_value=1.0):
+        """
+           Performs gamma adjustment on a dataset of 3D cubes.
+           Parameters:
+               dataset (list or numpy.ndarray): The dataset containing the image cubes.
+               gamma_value (float): The gamma value to use for the adjustment. Default is 1.0.
+           Returns:
+               numpy.ndarray: An array containing the gamma-adjusted image cubes.
+           """
+        preview = True  # A boolean variable to control display of test images
+        output = []  # Create an empty list to store the equalized cubes
+        for img in dataset:  # Iterate over each cube in the input dataset
+            matched = expo.adjust_gamma(img, gamma_value)  # Apply histogram equalization using equalize_hist() function
+            output.append(matched)  # Append the equalized cube to the output list
+            if preview:  # If test is True, display a comparison of original and equalized cube images
+                fig, axes = plt.subplots(1, 2)
+                axes[0].imshow(img, cmap='gray')
+                axes[0].set_title('Original', fontsize=10)
+                axes[1].imshow(matched, cmap='gray')
+                axes[1].set_title('Gamma adjusted (γ = {})'.format(gamma_value), fontsize=10)
+                plt.show()
+                preview = False
+        return ndarray(output)  # Convert the output list to a NumPy array and return it
 
 
-def normalize_histograms(dataset):
-    """
+    def normalize_histograms(dataset):
+        """
         Normalize the histograms of a dataset using the best representative image.
         Args:
             dataset (list of ndarray): A list of input images.
         Returns:
             list of ndarray: The normalized images.
         """
-    print("normalize_histograms")  # Should be removed after deployment
+        print("normalize_histograms")  # Should be removed after deployment
 
     def select_best_reference(dataset_reference):
         """
@@ -425,63 +425,63 @@ def normalize_histograms(dataset):
         # Return the best representative image
         return dataset_reference[best_index]
 
-    # Select the best representative image
-    best_reference = select_best_reference(dataset)
-    preview = True  # A boolean variable to control display of test images
-    normalized_images = []
-    for img in dataset:
-        # Perform histogram matching separately for each channel (if multichannel)
-        if img.ndim == 3:  # Check if the image is multichannel (color)
-            matched_channels = []
-            for channel in range(img.shape[2]):
-                matched = match_histograms(img[:, :, channel], best_reference[:, :, channel])
-                matched_channels.append(matched)
-            matched = np.stack(matched_channels, axis=2)
-        else:
-            # For single-channel images, perform histogram matching directly
-            matched = match_histograms(img, best_reference)
-        normalized_images.append(matched)
-        if preview:
-            fig, axes = plt.subplots(1, 2)
-            axes[0].imshow(img, cmap='gray')
-            axes[0].set_title('Original', fontsize=10)
-            axes[0].axis('off')
-            axes[1].imshow(matched, cmap='gray')
-            axes[1].set_title('Normalized', fontsize=10)
-            axes[1].axis('off')
-            plt.show()
-            preview = False
-    return np.array(normalized_images)
+        # Select the best representative image
+        best_reference = select_best_reference(dataset)
+        preview = True  # A boolean variable to control display of test images
+        normalized_images = []
+        for img in dataset:
+            # Perform histogram matching separately for each channel (if multichannel)
+            if img.ndim == 3:  # Check if the image is multichannel (color)
+                matched_channels = []
+                for channel in range(img.shape[2]):
+                    matched = match_histograms(img[:, :, channel], best_reference[:, :, channel])
+                    matched_channels.append(matched)
+                matched = np.stack(matched_channels, axis=2)
+            else:
+                # For single-channel images, perform histogram matching directly
+                matched = match_histograms(img, best_reference)
+            normalized_images.append(matched)
+            if preview:
+                fig, axes = plt.subplots(1, 2)
+                axes[0].imshow(img, cmap='gray')
+                axes[0].set_title('Original', fontsize=10)
+                axes[0].axis('off')
+                axes[1].imshow(matched, cmap='gray')
+                axes[1].set_title('Normalized', fontsize=10)
+                axes[1].axis('off')
+                plt.show()
+                preview = False
+        return np.array(normalized_images)
 
 
-# Function to perform contrast stretching on a dataset of 3D cube
-def contrast_stretching(dataset):
-    """
+    # Function to perform contrast stretching on a dataset of 3D cube
+    def contrast_stretching(dataset):
+        """
        Apply contrast stretching to a dataset of 3D images (or cubes) by adjusting intensity.
        Args:
            dataset (list of ndarray): A list of input images.
        Returns:
            list of ndarray: The contrast-stretched images.
        """
-    preview = True  # A boolean variable to control display of test images
-    print("contrast_stretching")  # Should be removed after deployment
-    for i, img in enumerate(dataset):
-        # Ensure img is a Numpy array
-        img = np.array(img)
-        p2, p98 = np.percentile(img, (5, 95))  # Calculate the 5th and 95th percentiles
-        # Update the dataset with the contrast-stretched image
-        # Rescale intensity based on the percentiles
-        matched = rescale_intensity(img, in_range=(p2, p98))
-        dataset[i] = matched  # Update the dataset with the contrast-stretched image
-        if preview:  # Display original and contrast-stretched images for the first slice in the first batch
-            fig, axes = plt.subplots(1, 2)
-            axes[0].imshow(img, cmap='gray')
-            axes[0].set_title('Original', fontsize=10)
-            axes[1].imshow(matched, cmap='gray')
-            axes[1].set_title('Contrast stretched', fontsize=10)
-            plt.show()
-            preview = False
-    return dataset  # Return the modified dataset
+        preview = True  # A boolean variable to control display of test images
+        print("contrast_stretching")  # Should be removed after deployment
+        for i, img in enumerate(dataset):
+            # Ensure img is a Numpy array
+            img = np.array(img)
+            p2, p98 = np.percentile(img, (5, 95))  # Calculate the 5th and 95th percentiles
+            # Update the dataset with the contrast-stretched image
+            # Rescale intensity based on the percentiles
+            matched = rescale_intensity(img, in_range=(p2, p98))
+            dataset[i] = matched  # Update the dataset with the contrast-stretched image
+            if preview:  # Display original and contrast-stretched images for the first slice in the first batch
+                fig, axes = plt.subplots(1, 2)
+                axes[0].imshow(img, cmap='gray')
+                axes[0].set_title('Original', fontsize=10)
+                axes[1].imshow(matched, cmap='gray')
+                axes[1].set_title('Contrast stretched', fontsize=10)
+                plt.show()
+                preview = False
+        return dataset  # Return the modified dataset
 
     # noinspection PyUnreachableCode
     def load_data(self):
@@ -539,10 +539,13 @@ def contrast_stretching(dataset):
                 self.y_test = y_test
             return self.x_train, self.y_train, self.x_test, self.y_test
         else:  # Inference case
-            x = np.zeros([self.stackImage.getStackSize(), self.stackImage.getHeight(), self.stackImage.getWidth(),
-                          self.stackImage.getChannel()])
-            for j in range(self.stackImage.getStackSize()):
-                x[j, :, :, :] = self.stackImage.getListSlice()[j]
+            x = np.zeros([self.stack_image.get_stack_size(),
+                          self.stack_image.get_height(),
+                          self.stack_image.get_width(),
+                          self.stack_image.get_channel()])
+
+            for j in range(self.stack_image.get_stack_size()):
+                x[j, :, :, :] = self.stack_image.get_list_slice()[j]
             # Image treatment
 
             # Call the functions using their names from the array

@@ -3,7 +3,7 @@ import torch
 import matplotlib.pyplot as plt
 from PIL import Image
 from Hyperparameters import Hyperparameters  # Ensure the import path is correct
-from resUNet import ResUNet  # Ensure the import path is correct
+from resUNet_pytorch import ResUNet  # Ensure the import path is correct
 from util import Util  # Ensure the import path is correct
 
 
@@ -58,7 +58,7 @@ def predict(model, image):
     """
     with torch.no_grad():  # Disable gradient calculation
         image_tensor = torch.from_numpy(image).permute(2, 0, 1).unsqueeze(0)  # Convert image to tensor
-        output = model(image_tensor)  # Perform prediction
+        output = model.model(image_tensor)  # Perform prediction
         predicted_mask = torch.argmax(output, dim=1).squeeze().cpu().numpy()  # Get the predicted class
         return predicted_mask
 
@@ -137,14 +137,14 @@ def run_inference(image_path, weights_path, hyperparams_path):
     # Preprocess the image
     try:
         image = preprocess_image(image_path, util.scaler)
+        # Perform prediction
+        predicted_mask = predict(model, image)
+        # Display the results
+        # Pass None for the mask as it is not available
+        display_results(torch.from_numpy(image), torch.from_numpy(None), torch.from_numpy(predicted_mask))
     except Exception as e:
         print(f"Error preprocessing image: {e}")
         return
 
-    # Perform prediction
-    predicted_mask = predict(model, image)
-
-    # Display the results
-    display_results(image, None, predicted_mask)  # Pass None for the mask as it is not available
 
 # The file can be imported without executing any code

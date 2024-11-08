@@ -41,22 +41,22 @@ class ResUNet:
         if "data" in kwargs:
             if isinstance(kwargs['data'], Util):
                 self.util = kwargs['data']
-                self.x_train = self.util.getXtrain()
-                self.y_train = self.util.getYtrain()
-                self.x_test = self.util.getXtest()
-                self.y_test = self.util.getYtest()
-                self.num_class = self.util.getNumClass()
+                self.x_train = self.util.get_x_train()
+                self.y_train = self.util.get_y_train()
+                self.x_test = self.util.get_x_test()
+                self.y_test = self.util.get_y_test()
+                self.num_class = self.util.get_num_class()
                 self.FILE_TXT = self.FILE_TXT + "\nnumClass = " + str(self.num_class)
-                self.FILE_TXT = self.FILE_TXT + "\nnumSample = " + str(self.util.getNumSlice())
+                self.FILE_TXT = self.FILE_TXT + "\nnumSample = " + str(self.util.get_num_slice())
                 self.FILE_TXT = self.FILE_TXT + "\nval_split = " + str(self.util.get_validation_split())
                 self.FILE_TXT = self.FILE_TXT + "\nimage_preprocessing_functions = ["
-                if len(self.util.getImagePreprocessingFunctions()) > 0:
-                    marker = len(self.util.getImagePreprocessingFunctions()) - 1
+                if len(self.util.get_image_preprocessing_functions()) > 0:
+                    marker = len(self.util.get_image_preprocessing_functions()) - 1
                     i = 0
-                    for function in self.util.getImagePreprocessingFunctions():
-                        if len(self.util.getImagePreprocessingFunctions()) == 1:
+                    for function in self.util.get_image_preprocessing_functions():
+                        if len(self.util.get_image_preprocessing_functions()) == 1:
                             self.FILE_TXT = self.FILE_TXT + function
-                        elif len(self.util.getImagePreprocessingFunctions()) > 1:
+                        elif len(self.util.get_image_preprocessing_functions()) > 1:
                             if marker == i:
                                 self.FILE_TXT = self.FILE_TXT + function
                             else:
@@ -85,7 +85,7 @@ class ResUNet:
             self.learning_rate = 1e-5
         self.FILE_TXT = self.FILE_TXT + "\nlearningRate = " + str(self.learning_rate)
 
-        if "L2" in kwargs:  # L2 regularization factor to prevent overfitting
+        if "L2" in kwargs:  # L2 regularization factor to prevent over-fitting
             self.L2 = float(kwargs['L2'])
         else:
             self.L2 = 1e-5
@@ -104,7 +104,7 @@ class ResUNet:
             self.max_norm = 1
         self.FILE_TXT = self.FILE_TXT + "\nMaxNorm = " + str(self.max_norm)
 
-        if "dropOut" in kwargs:  # Whether to use dropout to prevent overfitting
+        if "dropOut" in kwargs:  # Whether to use dropout to prevent over-fitting
             self.drop_out = bool(kwargs['dropOut'])
             self.FILE_TXT = self.FILE_TXT + "\ndropOut = " + str(self.drop_out)
         else:
@@ -388,7 +388,7 @@ class ResUNet:
         validation_steps = len(self.x_test) // self.batch_size
 
         # Early stopping setup
-        early_stopping = None
+        # early_stopping = None
         # if self.early_stopping:
         #   early_stopping = EarlyStopping(patience=self.patience, verbose=1)
 
@@ -428,7 +428,7 @@ class ResUNet:
 
                 running_loss += loss.item()
 
-            print(f'Epoch [{epoch + 1}/{self.epochs}], Loss: {running_loss / steps_per_epoch:.4f}')
+            print(f'Epoch [{epoch + 1}/{self.epochs}], Loss: {running_loss / steps_per_epoch: .4f}')
 
             # Validation step
             self.model.eval()
@@ -440,16 +440,17 @@ class ResUNet:
                     loss = criterion(outputs, labels)
                     val_loss += loss.item()
 
-            print(f'Validation Loss: {val_loss / validation_steps:.4f}')
+            print(f'Validation Loss: {val_loss / validation_steps: .4f}')
 
             # Early stopping check
-            if early_stopping:
-                early_stopping(val_loss / validation_steps, self.model)
-                if early_stopping.early_stop:
-                    print("Early stopping")
-                    break
+            # if early_stopping:
+            #     early_stopping(val_loss / validation_steps, self.model)
+            #     if early_stopping.early_stop:
+            #         print("Early stopping")
+            #         break
 
         # Save metrics plot
+        # // Error as epoch and running_loss are declared in the for context (line 416) but used outside //
         plt.plot(range(1, epoch + 2), running_loss, label='Training Loss')
         plt.title('Training Loss')
         plt.xlabel('Epoch')

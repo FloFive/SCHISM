@@ -4,14 +4,10 @@ Created on Tue Oct 11 14:42:39 2022
 
 @author: florent.brondolo
 """
-import sys
 import os
 import numpy as np
-from skimage import io
-from skimage.color import rgb2gray  # Import rgb2gray for converting to grayscale
 import random
-from .ProgressBar import ProgressBar
-from sklearn.preprocessing import LabelEncoder
+from code.Backup.ProgressBar import ProgressBar
 import tifffile as tiff
 import cv2
 

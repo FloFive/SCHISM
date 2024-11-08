@@ -24,6 +24,8 @@ from classes.Hyperparameters import Hyperparameters
 from matplotlib.colors import ListedColormap
 import cv2  # Import OpenCV
 
+from classes.resUNet_pytorch import ResUNet
+
 # Set TensorFlow logging level
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
@@ -160,7 +162,7 @@ util = Util(name="batch test",
             image_preprocessing_functions=hyperparams.image_preprocessing_functions,
             stackImage=stackImage,
             stackLabel=stackLabel)
-x_train, y_train, x_test, y_test = util.loadData()
+x_train, y_train, x_test, y_test = util.load_data()
 
 # 2nd visual check (optional)
 print("Xtrain - Min:", np.min(x_train))
@@ -200,12 +202,14 @@ else:
 axes[1, 1].set_title('Ytest', fontsize=15)
 axes[1, 1].axis('off')
 
+
 # Compute class counts
 def compute_class_counts(labels):
     unique_classes, class_counts = np.unique(labels, return_counts=True)
     print("Class Counts:")
     for class_label, count in zip(unique_classes, class_counts):
         print(f"Class {class_label}: {count} samples")
+
 
 compute_class_counts(stackLabel[0].get_list_slice())
 
@@ -274,8 +278,8 @@ if real_inference:
                  image_preprocessing_functions=image_preprocessing_functions,
                  stackImage=stackImage)
 
-    img_pred, y_train, x_test, y_test = util2.loadData()
-    if pretrained and util2.getImageType() == 1:
+    img_pred, y_train, x_test, y_test = util2.load_data()
+    if pretrained and util2.get_image_type() == 1:
         img_pred = np.concatenate([img_pred] * 3, axis=-1)
     y_pred_threshold = generate_prediction(loaded_model, img_pred, numClass)
 else:
@@ -308,10 +312,10 @@ else:
                         stackImage=stackImage,
                         stackLabel=stackLabel)
 
-    img_pred, maskTesting, null_variable1, null_variable2 = util_testing.loadData()
-    numClass = util_testing.getNumClass()
+    img_pred, maskTesting, null_variable1, null_variable2 = util_testing.load_data()
+    numClass = util_testing.get_num_class()
 
-    if pretrained and util_testing.getImageType() == 1:
+    if pretrained and util_testing.get_image_type() == 1:
         img_pred = np.concatenate([img_pred] * 3, axis=-1)
 
     y_pred_threshold = generate_prediction(loaded_model, img_pred, numClass)
