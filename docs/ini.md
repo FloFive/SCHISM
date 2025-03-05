@@ -62,10 +62,20 @@ These options are derived from `torch.nn`. Parameters, if any, should match the 
 ## [Training]
 Configures training parameters.
 
-- `batch_size`, `val_split`, and `epochs` are required.
-- `metrics`: `Jaccard` (preset by default), `F1`, `Accuracy`, `Precision` and `Recall`. To include a confusion matrix plot at the end of training, add `ConfusionMatrix` to the list of metrics.
-
-
+- Batch Size (`batch_size`), Validation Split (`val_split`), and Epochs (`epochs`): These parameters should be carefully adjusted based on your dataset and hardware constraints. By default, they are set as follows:
+  - `batch_size`: 8
+  - `val_split`: 0.8 (80% of the dataset used for training, 20% for validation)
+  - `epochs`: 10
+    
+- Evaluation Metrics (`metrics`): The model performance can be assessed using one or more of the following metrics:
+  - `Jaccard` (preset by default)
+  - `F1-score`
+  - `Accuracy`
+  - `Precision`
+  - `Recall`
+  - Additionally, setting metrics to include `ConfusionMatrix` will generate a confusion matrix plot at the end of training.
+    
+- Early Stopping (`early_stopping`): When enabled (`True`), early stopping prevents overfitting by monitoring the loss value. If the loss remains unchanged for a certain number of epochs, training is stopped automatically. The patience period (i.e., the number of epochs with stable loss before stopping) is set to 20% of the total epoch count. For example, if epochs=50, early stopping will trigger after 10 consecutive epochs without improvement. This function can either be ignored or set to `False`.
 
 ## [Data]
 Configures data handling.

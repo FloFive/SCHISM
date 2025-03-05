@@ -170,23 +170,38 @@ class TiffDatasetLoader(VisionDataset):
             sorted_values.pop(0)  # Remove the background class (usually class 0)
         
         return sorted_values
-    
-    def _weights_calc(self, mask, temperature=50.0):
-        mask = mask.astype(np.int64)  
-        counts = np.bincount(mask.ravel(), minlength=self.num_classes)[self.class_values]
         
-        class_ratio = counts / (np.sum(counts) + 1e-8)  # Avoid divide by zero
-        u_weights = 1 / (class_ratio + 1e-8)  # Avoid division by zero
+    def _weights_calc(self, mask, temperature=50.0):
+        # Initialize weights with 0 for each class
+        weights = np.zeros(self.num_classes, dtype=np.float32)
+        
+        # Get the unique classes present in the mask
+        unique_classes_in_mask = np.unique(mask)
 
-        weights = nn_func.softmax(torch.from_numpy(u_weights).float() / temperature, dim=-1)
+        # Iterate over all the classes defined in self.class_values
+        for i, class_value in enumerate(self.class_values):
+            if class_value in unique_classes_in_mask:
+                # Compute weight for present class 
+                class_frequency = np.sum(mask == class_value)  # Count the occurrences of class_value in mask
+                class_weight = 1 / (class_frequency + 1e-8)  # Inverse of frequency
+                weights[i] = class_weight
+            else:
+                # Set weight to 0 for potential missing classes (happens when crop size is small)
+                weights[i] = 0
 
-        if torch.any(torch.isnan(weights)):
-            print(weights)
-            print(class_ratio)
-            print(u_weights)
-            raise RuntimeError("NaN detected in weights calculation.")
-
-        return weights
+        # Apply temperature scaling if needed
+        weights = weights / temperature
+        
+        # Normalize weights so they sum to 1
+        total_weight = np.sum(weights)
+        if total_weight > 0:
+            weights = weights / total_weight  # Normalize weights to sum to 1
+        
+        # Ensure weights are non-negative
+        weights = np.maximum(weights, 0)
+        
+        # Convert to a tensor
+        return torch.tensor(weights)
 
     def __getitem__(self, idx):
         """

@@ -88,7 +88,8 @@ batch_size=4
 val_split=0.8
 epochs=40
 metrics=Jaccard, F1, Recall, Accuracy, Precision, ConfusionMatrix
- 
+early_stopping=True
+
 [Data]
 crop_size=225
 img_res=512

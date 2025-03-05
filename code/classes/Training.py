@@ -11,15 +11,16 @@ from tqdm import tqdm
 from classes.TiffDatasetLoader import TiffDatasetLoader
 from classes.ParamConverter import ParamConverter
 from classes.TrainingLogger import TrainingLogger
+from classes.model_registry import model_mapping
 from datetime import datetime
 from torch.optim import Adagrad, Adam, AdamW, NAdam, RMSprop, RAdam, SGD
 from torch.optim.lr_scheduler import LRScheduler, LambdaLR, MultiplicativeLR, StepLR, MultiStepLR, ConstantLR, LinearLR, ExponentialLR, PolynomialLR, CosineAnnealingLR, SequentialLR, ReduceLROnPlateau, CyclicLR, OneCycleLR, CosineAnnealingWarmRestarts
 from torchmetrics.classification import BinaryJaccardIndex, MulticlassJaccardIndex, MulticlassF1Score, BinaryF1Score, BinaryAccuracy, MulticlassAccuracy, BinaryAveragePrecision, MulticlassAveragePrecision, BinaryConfusionMatrix, MulticlassConfusionMatrix, BinaryPrecision, MulticlassPrecision, BinaryRecall, MulticlassRecall
-from torch.nn import PoissonNLLLoss, CrossEntropyLoss, BCEWithLogitsLoss, GaussianNLLLoss, NLLLoss
+from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss, NLLLoss
 from torch.utils.data import DataLoader
 import torch.nn.functional as nn_func
-from classes.model_registry import model_mapping
 import torch.backends.cudnn as cudnn
+from early_stopping_pytorch import EarlyStopping
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -48,47 +49,6 @@ class Training:
         Raises:
             Exception: If pathLogDir is not provided.
         """
-        self.param_converter = ParamConverter()  
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.subfolders = kwargs.get('subfolders')
-        self.data_dir = kwargs.get('data_dir')
-        self.run_dir = kwargs.get('run_dir')
-        self.hyperparameters = kwargs.get('hyperparameters')
-       
-        # Extract category-wise parameters
-        self.model_params = {k: v for k, v in self.hyperparameters.get_parameters()['Model'].items()}
-        self.optimizer_params = {k: v for k, v in self.hyperparameters.get_parameters()['Optimizer'].items()}
-        self.scheduler_params = {k: v for k, v in self.hyperparameters.get_parameters()['Scheduler'].items()}
-        self.loss_params = {k: v for k, v in self.hyperparameters.get_parameters()['Loss'].items()}
-        self.training_params = {k: v for k, v in self.hyperparameters.get_parameters()['Training'].items()}
-        self.data = {k: v for k, v in self.hyperparameters.get_parameters()['Data'].items()}
-        self.num_classes = int(self.model_params.get('num_classes'))
-        self.num_classes = 1 if self.num_classes <= 2 else self.num_classes
-
-        #Loss parameters
-        self.weights = self.param_converter._convert_param(self.loss_params.get('weights', "False"))
-        self.ignore_background = self.param_converter._convert_param(self.loss_params.get('ignore_background', "False"))
-        
-        if self.ignore_background:
-            self.ignore_index = -1 
-        else:
-            self.ignore_index = -100
-            
-        # Training parameters
-        self.batch_size = int(self.training_params.get('batch_size', 8))
-        self.val_split = float(self.training_params.get('val_split', 0.8))
-        self.epochs = int(self.training_params.get('epochs', 10))
-
-        # Data parameters
-        self.img_res = int(self.data.get('img_res', 560))
-        self.crop_size = int(self.data.get('crop_size', 224))
-        self.num_samples = int(self.data.get('num_samples', 500))
-
-        # Extract and parse metrics from the ini file
-        self.metrics_str = self.training_params.get('metrics', '')        
-        self.training_time = datetime.now().strftime("%d-%m-%y-%H-%M-%S")
-        self.model_mapping = model_mapping
-
         self.optimizer_mapping = {
             'Adagrad' : Adagrad, 
             'Adam' : Adam, 
@@ -123,7 +83,63 @@ class Training:
             'CosineAnnealingWarmRestarts': CosineAnnealingWarmRestarts
         }
         
+        self.param_converter = ParamConverter()  
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.subfolders = kwargs.get('subfolders')
+        self.data_dir = kwargs.get('data_dir')
+        self.run_dir = kwargs.get('run_dir')
+        self.hyperparameters = kwargs.get('hyperparameters')
+       
+        #Model parameters
+        self.model_params = {k: v for k, v in self.hyperparameters.get_parameters()['Model'].items()}
+        self.num_classes = self.param_converter._convert_param(self.model_params.get('num_classes', 3))
+        self.num_classes = 1 if self.num_classes <= 2 else self.num_classes
+        self.model_mapping = model_mapping
         self.model = self.initialize_model()
+       
+        #Optimizer parameters
+        self.optimizer_params = {k: v for k, v in self.hyperparameters.get_parameters()['Optimizer'].items()}
+        self.optimizer = self.initialize_optimizer()
+        
+        #Scheduler parameters
+        self.scheduler_params = {k: v for k, v in self.hyperparameters.get_parameters()['Scheduler'].items()}
+        self.scheduler = self.initialize_scheduler(optimizer=self.optimizer)
+
+        #Loss parameters
+        self.loss_params = {k: v for k, v in self.hyperparameters.get_parameters()['Loss'].items()}
+        self.weights = self.param_converter._convert_param(self.loss_params.get('weights', "False"))
+        self.ignore_background = self.param_converter._convert_param(self.loss_params.get('ignore_background', "False"))
+            
+        # Training parameters
+        self.training_params = {k: v for k, v in self.hyperparameters.get_parameters()['Training'].items()}
+        self.batch_size = self.param_converter._convert_param(self.training_params.get('batch_size', 8))
+        self.val_split = self.param_converter._convert_param(self.training_params.get('val_split', 0.8))
+        self.epochs = self.param_converter._convert_param(self.training_params.get('epochs', 10))
+        self.early_stopping = self.param_converter._convert_param(self.training_params.get('early_stopping', "False"))
+        self.metrics_str = self.param_converter._convert_param(self.training_params.get('metrics', ''))        
+       
+        # Data parameters
+        self.data = {k: v for k, v in self.hyperparameters.get_parameters()['Data'].items()}
+        self.img_res = self.param_converter._convert_param(self.data.get('img_res', 560))
+        self.crop_size = self.param_converter._convert_param(self.data.get('crop_size', 224))
+        self.num_samples = self.param_converter._convert_param(self.data.get('num_samples', 500))
+
+        self.training_time = datetime.now().strftime("%d-%m-%y-%H-%M-%S")
+
+        if self.ignore_background:
+            self.ignore_index = -1 
+        else:
+            self.ignore_index = -100
+            
+        if self.early_stopping:
+            patience = int(self.epochs*0.2)
+            if patience > 1:
+                self.early_stopping_instance = EarlyStopping(patience=patience, verbose=True)
+            else:
+                self.early_stopping=False
+                print("Early stopping has been automatically disabled because the patience value is too low.")
+                print("Training will begin as normal.")
+
         self.save_directory = self.create_unique_folder()
         self.logger = TrainingLogger(save_directory=self.save_directory,
                                     num_classes=self.num_classes,
@@ -133,7 +149,7 @@ class Training:
                                     loss_params=self.loss_params,
                                     training_params=self.training_params,
                                     data=self.data)
-
+                                    
     def create_metric(self, binary_metric, multiclass_metric):
         return (
             binary_metric(ignore_index=self.ignore_index).to(self.device)
@@ -461,7 +477,10 @@ class Training:
         for epoch in range(1, self.epochs + 1):
             
             print_epoch_box(epoch, self.epochs)
-        
+            
+            if self.early_stopping:
+                epoch_val_loss = None  # To store validation loss from the "val" phase
+
             for phase in ["train", "val"]:
                 is_training = (phase == "train")
                 self.model.train() if is_training else self.model.eval()
@@ -552,6 +571,9 @@ class Training:
                     torch.save(self.model.state_dict(), os.path.join(self.save_directory, "model_best_loss.pth"))
         
                 if phase == "val":
+                    if self.early_stopping:
+                        epoch_val_loss = epoch_loss  # Save validation loss for early stopping
+                        
                     for metric, value in epoch_metrics.items():
                         if value > best_val_metrics[metric]:
                             best_val_metrics[metric] = value
@@ -559,16 +581,22 @@ class Training:
                                 self.model.state_dict(),
                                 os.path.join(self.save_directory, f"model_best_{metric}.pth")
                             )
-        
+            
+            # Call early stopping after validation phase has finished for the epoch
+            if (self.early_stopping) and (epoch_val_loss is not None):
+                self.early_stopping_instance(epoch_val_loss, self.model)
+                if self.early_stopping_instance.early_stop:
+                    print("Early stopping triggered")
+                    break  # Exit training loop if no improvement for 'patience' epochs
+
+            
         print(f"Best Validation Metrics: {best_val_metrics}")
         
         return loss_dict, metrics_dict, metrics
 
     def train(self):
-            optimizer = self.initialize_optimizer()
-            scheduler = self.initialize_scheduler(optimizer=optimizer)
-            loss_dict, metrics_dict, metrics = self.training_loop(optimizer=optimizer, 
-                                                                scheduler=scheduler)
+            loss_dict, metrics_dict, metrics = self.training_loop(optimizer=self.optimizer, 
+                                                                scheduler=self.scheduler)
             
             #plot and metric saving
             self.logger.save_best_metrics(loss_dict=loss_dict, 
