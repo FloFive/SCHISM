@@ -29,7 +29,6 @@ class TiffDatasetLoader(VisionDataset):
         self.ignore_background = ignore_background
         self.weights = weights
         self.image_dims = self.get_image_dimensions()
-        self.dataset_type = dataset_type
         if not self.inference_mode:
             self.class_values = self._compute_class_values()
 
