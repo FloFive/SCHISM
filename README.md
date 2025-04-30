@@ -117,8 +117,8 @@ data <--- Select this folder for data input during training or inference.
 |_data_stats.json <--- This file is optional.
 ```
 
-- **Images**: Directory containing the input images.
-- **Masks**: Directory containing the corresponding segmentation masks.
+- **Images**: The directory containing the input images. Images must be in TIFF format and will be automatically converted to HWC (Height, Width, Channels) format.
+- **Masks**: The directory containing the corresponding segmentation masks. Masks will be converted to 8-bit format (uint8) with values set between 0 and 255.
 - **data_stats.json**: (Optional) A JSON file containing mean and standard deviation values for normalization. Currently, this file must be set manually and should follow this format:
 
 ```

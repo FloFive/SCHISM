@@ -408,7 +408,8 @@ class Training:
             crop_size=(self.crop_size, self.crop_size),
             data_stats=data_stats,
             img_res=self.img_res, 
-            ignore_background=self.ignore_background
+            ignore_background=self.ignore_background,
+            weights=self.weights
         )
         val_dataset = TiffDatasetLoader(
             indices=val_indices,
@@ -418,7 +419,8 @@ class Training:
             crop_size=(self.crop_size, self.crop_size),
             data_stats=data_stats,
             img_res=self.img_res,
-            ignore_background=self.ignore_background
+            ignore_background=self.ignore_background,
+            weights=self.weights
         )
         test_dataset = TiffDatasetLoader(
             indices=test_indices,
@@ -428,12 +430,14 @@ class Training:
             crop_size=(self.crop_size, self.crop_size),
             data_stats=data_stats,
             img_res=self.img_res,
-            ignore_background=self.ignore_background
+            ignore_background=self.ignore_background,
+            weights=self.weights
         )
 
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=2,
                                   pin_memory=True, drop_last=True)
-        val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=2, drop_last=True)
+        val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=2, 
+                                 pin_memory=True, drop_last=True)
         test_loader = DataLoader(test_dataset, batch_size=10, shuffle=False, num_workers=2, drop_last=True)
 
         self.logger.save_indices_to_file([train_indices, val_indices, test_indices])
@@ -448,77 +452,69 @@ class Training:
     def training_loop(self, optimizer, scheduler):
         
         def print_epoch_box(epoch, total_epochs):
-            # Generate the epoch string
             epoch_str = f" Epoch {epoch}/{total_epochs} "
-        
-            # Determine the width of the box based on the string length
-            box_width = len(epoch_str) + 4  # Add padding for the box
-        
-            # Create the box
+            box_width = len(epoch_str) + 4
             print(f"╔{'═' * (box_width - 2)}╗")
             print(f"║{epoch_str.center(box_width - 2)}║")
             print(f"╚{'═' * (box_width - 2)}╝")
-    
+        
         scaler = None
         if self.device == "cuda":
             scaler = torch.amp.GradScaler()
-            cudnn.benchmark = True
-    
-        # Initialize metric instances and losses
-        metrics = self.initialize_metrics()  # This list includes your ConfusionMatrix instance if enabled
+            torch.backends.cudnn.benchmark = True  # Optimize conv layers
+
+        metrics = self.initialize_metrics()
         loss_dict = {"train": {}, "val": {}}
-    
-        # Build a list of display metric names (excluding "ConfusionMatrix")
         display_metrics = [m for m in self.metrics if m != "ConfusionMatrix"]
         metrics_dict = {phase: {metric: [] for metric in display_metrics} for phase in ["train", "val"]}
         best_val_loss = float("inf")
         best_val_metrics = {metric: 0 for metric in display_metrics}
-            
+
         for epoch in range(1, self.epochs + 1):
-            
             print_epoch_box(epoch, self.epochs)
-            
-            if self.early_stopping:
-                epoch_val_loss = None  # To store validation loss from the "val" phase
+            epoch_val_loss = None if self.early_stopping else None
 
             for phase in ["train", "val"]:
                 is_training = (phase == "train")
                 self.model.train() if is_training else self.model.eval()
-        
+
                 running_loss = 0.0
                 running_metrics = {metric: 0.0 for metric in display_metrics}
                 total_samples = 0
-        
-                with tqdm(total=len(self.dataloaders[phase]), unit="batch") as pbar:
-                    for inputs, labels, weights in self.dataloaders[phase]:
 
+                with tqdm(total=len(self.dataloaders[phase]), unit="batch", leave=True) as pbar:
+                    for inputs, labels, weights in self.dataloaders[phase]:
+                        # Move data to the proper device
                         inputs, labels, weights = inputs.to(self.device), labels.to(self.device), weights.to(self.device)
+
                         optimizer.zero_grad()
                         batch_weights = torch.mean(weights, dim=0)
-
+                        batch_weights = torch.clamp(batch_weights, min=1e-6)  # Avoid exact zero values
                         with torch.set_grad_enabled(is_training):
+                          
+                            # Forward pass under autocast using bfloat16
                             with torch.autocast(device_type=self.device, dtype=torch.bfloat16):
                                 outputs = self.model(inputs)
-                                if self.loss_params.get('loss') in ['NLLLoss']:
-                                    outputs = nn_func.log_softmax(outputs, dim=1)
 
-                                if self.num_classes == 1:
-                                    outputs = outputs.squeeze()  
-                                    labels = labels.squeeze().float() 
-                                else:
-                                    labels = labels.squeeze().long()  
+                            # If using NLLLoss, apply log_softmax to outputs
+                            if self.loss_params.get('loss') in ['NLLLoss']:
+                                outputs = torch.nn.functional.log_softmax(outputs, dim=1)
 
-                                #only apply class weights to multiclass segmentation
-                                if self.num_classes > 1:
-                                    if self.weights:
-                                        loss_fn = self.initialize_loss(weight=batch_weights)
-                                    else:
-                                        loss_fn = self.initialize_loss()
-                                else:
-                                    loss_fn = self.initialize_loss()
+                            # Adjust label type based on number of classes:
+                            if self.num_classes == 1:
+                                outputs = outputs.squeeze()
+                                # For binary segmentation using BCE, targets must be float
+                                labels = labels.squeeze().float()
+                            else:
+                                # For multi-class segmentation with CrossEntropyLoss, targets must be long
+                                labels = labels.squeeze().long()
 
-                                loss = loss_fn(outputs, labels)
-                               
+                            # Initialize loss function (apply class weights only if applicable)
+                            loss_fn = self.initialize_loss(weight=batch_weights if (self.weights and self.num_classes > 1) else None)
+
+                            # Cast outputs to float32 before computing the loss
+                            loss = loss_fn(outputs.float(), labels)
+                           
                             if is_training:
                                 if scaler:
                                     scaler.scale(loss).backward()
@@ -527,53 +523,53 @@ class Training:
                                 else:
                                     loss.backward()
                                     optimizer.step()
-        
+
                                 if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                                     scheduler.step(loss)
                                 else:
                                     scheduler.step()
-        
+
                         running_loss += loss.item()
                         total_samples += labels.size(0)
-        
+
                         with torch.no_grad():
                             preds = (torch.argmax(outputs, dim=1).long()
-                                     if self.num_classes > 1
-                                     else (outputs > 0.5).to(torch.uint8))
+                                    if self.num_classes > 1
+                                    else (outputs > 0.5).to(torch.uint8))
+                            # Ensure labels are long for metric computations (for multi-class)
                             labels = labels.long()
-        
-                            # Update display metrics only (skip ConfusionMatrix)
+
                             for metric_name, metric_fn in zip(self.metrics, metrics):
                                 if metric_name != "ConfusionMatrix":
                                     running_metrics[metric_name] += metric_fn(preds, labels).item()
-        
+
                         pbar.set_postfix(
                             loss=running_loss / (pbar.n + 1),
                             **{metric: running_metrics[metric] / (pbar.n + 1) for metric in display_metrics}
                         )
                         pbar.update(1)
-                                
+
                 epoch_loss = running_loss / len(self.dataloaders[phase])
                 epoch_metrics = {metric: running_metrics[metric] / len(self.dataloaders[phase])
-                                 for metric in display_metrics}
+                                for metric in display_metrics}
                 loss_dict[phase][epoch] = epoch_loss
-                        
+
                 for metric, value in epoch_metrics.items():
                     metrics_dict[phase][metric].append(value)
-        
+
                 print(f"{phase.title()} Loss: {epoch_loss: .4f}")
                 for metric, value in epoch_metrics.items():
                     print(f"{phase.title()} {metric}: {value: .4f}", end=" | ")
                 print()
-        
+
                 if phase == "val" and epoch_loss < best_val_loss:
                     best_val_loss = epoch_loss
                     torch.save(self.model.state_dict(), os.path.join(self.save_directory, "model_best_loss.pth"))
-        
+
                 if phase == "val":
                     if self.early_stopping:
-                        epoch_val_loss = epoch_loss  # Save validation loss for early stopping
-                        
+                        epoch_val_loss = epoch_loss
+
                     for metric, value in epoch_metrics.items():
                         if value > best_val_metrics[metric]:
                             best_val_metrics[metric] = value
@@ -581,15 +577,13 @@ class Training:
                                 self.model.state_dict(),
                                 os.path.join(self.save_directory, f"model_best_{metric}.pth")
                             )
-            
-            # Call early stopping after validation phase has finished for the epoch
-            if (self.early_stopping) and (epoch_val_loss is not None):
+
+            if self.early_stopping and epoch_val_loss is not None:
                 self.early_stopping_instance(epoch_val_loss, self.model)
                 if self.early_stopping_instance.early_stop:
                     print("Early stopping triggered")
-                    break  # Exit training loop if no improvement for 'patience' epochs
+                    break
 
-            
         print(f"Best Validation Metrics: {best_val_metrics}")
         
         return loss_dict, metrics_dict, metrics
