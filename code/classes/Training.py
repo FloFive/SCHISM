@@ -1,32 +1,39 @@
-import sys
-import os
-import torch
-import torch.nn as nn
-import numpy as np
-import glob
-import json
-import matplotlib
-matplotlib.use('Agg') 
-from tqdm import tqdm
-from classes.TiffDatasetLoader import TiffDatasetLoader
-from classes.ParamConverter import ParamConverter
-from classes.TrainingLogger import TrainingLogger
-from classes.model_registry import model_mapping
-from datetime import datetime
-from torch.optim import Adagrad, Adam, AdamW, NAdam, RMSprop, RAdam, SGD
+import sys # For file and path handling
+import os # For file and path handling
+import torch # Core PyTorch library and neural network modules
+import torch.nn as nn 
+import numpy as np # Array operations, useful for stats and masks
+import glob # Finds pathnames matching a pattern (e.g., *.tif)
+import json # Loads config or normalization statistics.
+import matplotlib 
+matplotlib.use('Agg') # Enables plotting without opening windows (important when running on servers with no GUI).
+from tqdm import tqdm # Adds a progress bar to your training loop — super helpful!
+from classes.TiffDatasetLoader import TiffDatasetLoader #  Loads .tif image/mask pairs
+from classes.ParamConverter import ParamConverter # Converts string config values into Python types (like converting 'True' → True)
+from classes.TrainingLogger import TrainingLogger # Saves plots, metrics, models.
+from classes.model_registry import model_mapping # Dictionary mapping model names (like 'UnetVanilla') to model classes.
+from datetime import datetime # Used to timestamp the training session (e.g., 22-04-25-13-10-00)
+from torch.optim import Adagrad, Adam, AdamW, NAdam, RMSprop, RAdam, SGD # Imports a bunch of PyTorch optimizers
+# Imports all learning rate schedulers:
 from torch.optim.lr_scheduler import LRScheduler, LambdaLR, MultiplicativeLR, StepLR, MultiStepLR, ConstantLR, LinearLR, ExponentialLR, PolynomialLR, CosineAnnealingLR, SequentialLR, ReduceLROnPlateau, CyclicLR, OneCycleLR, CosineAnnealingWarmRestarts
+# Imports metrics like Jaccard, F1, Accuracy, etc. for both binary and multiclass segmentation.
 from torchmetrics.classification import BinaryJaccardIndex, MulticlassJaccardIndex, MulticlassF1Score, BinaryF1Score, BinaryAccuracy, MulticlassAccuracy, BinaryAveragePrecision, MulticlassAveragePrecision, BinaryConfusionMatrix, MulticlassConfusionMatrix, BinaryPrecision, MulticlassPrecision, BinaryRecall, MulticlassRecall
+# Imports loss functions.
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss, NLLLoss
+# PyTorch class that turns datasets into iterable batches
 from torch.utils.data import DataLoader
+# Functional interface for operations like log_softmax, interpolate, etc.
+# cudnn.benchmark = True: Enables faster performance on consistent input sizes (e.g., all images are 224×224).
 import torch.nn.functional as nn_func
 import torch.backends.cudnn as cudnn
+# Utility that stops training early if validation loss stops improving.
 from early_stopping_pytorch import EarlyStopping
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) # Adds the project root directory to the Python path, so you can import local modules.
 
-class Training:
+class Training: # This class contains everything needed to run a training session — including data loading, model setup, training loop, logging, and saving.
 
-    def __repr__(self):
+    def __repr__(self): #it tells the user the label 'Training'
         """
         Returns a string representation of the Training class.
 
@@ -49,7 +56,7 @@ class Training:
         Raises:
             Exception: If pathLogDir is not provided.
         """
-        self.optimizer_mapping = {
+        self.optimizer_mapping = {  # This is called “dictionary-based dispatch” — using a dictionary to look up what function or class to run. It's a clean and powerful design pattern. Later it will be recalled for feeding the specific class
             'Adagrad' : Adagrad, 
             'Adam' : Adam, 
             'AdamW' : AdamW, 
@@ -84,18 +91,18 @@ class Training:
         }
         
         self.param_converter = ParamConverter()  
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.subfolders = kwargs.get('subfolders')
-        self.data_dir = kwargs.get('data_dir')
-        self.run_dir = kwargs.get('run_dir')
-        self.hyperparameters = kwargs.get('hyperparameters')
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu' # This auto-detects if your machine has a GPU (called CUDA). If not, it falls back to CPU.
+        self.subfolders = kwargs.get('subfolders')  #Which subfolders have the images these store user-configured parameters for: Where to find the data
+        self.data_dir = kwargs.get('data_dir')    # Where the data is these store user-configured parameters for: What subfolders to load
+        self.run_dir = kwargs.get('run_dir')   # Where to save model outputs these store user-configured parameters for: What subfolders to load
+        self.hyperparameters = kwargs.get('hyperparameters')  # What the training setup should be these store user-configured parameters for: How to train the model (batch size, learning rate, etc.) Tips: dict.get(key, default) is safer than dict[key] because it won’t crash if the key doesn’t exist.
        
         #Model parameters
-        self.model_params = {k: v for k, v in self.hyperparameters.get_parameters()['Model'].items()}
-        self.num_classes = self.param_converter._convert_param(self.model_params.get('num_classes', 3))
-        self.num_classes = 1 if self.num_classes <= 2 else self.num_classes
+        self.model_params = {k: v for k, v in self.hyperparameters.get_parameters()['Model'].items()} # This is copying all key-value pairs from self.hyperparameters.get_parameters()['Model'].items()
+        self.num_classes = self.param_converter._convert_param(self.model_params.get('num_classes', 3))  # Then it uses param_converter._convert_param() to convert it from a string (like '2') to an integer.
+        self.num_classes = 1 if self.num_classes <= 2 else self.num_classes # If the number of classes is 2 or less, we treat it as binary segmentation, so we set self.num_classes = 1. Because PyTorch treats: num_classes = 1 ➜ binary mask (0 = background, 1 = object)
         self.model_mapping = model_mapping
-        self.model = self.initialize_model()
+        self.model = self.initialize_model()  # Calls the function initialize_model() to read which model to use
        
         #Optimizer parameters
         self.optimizer_params = {k: v for k, v in self.hyperparameters.get_parameters()['Optimizer'].items()}
@@ -107,23 +114,45 @@ class Training:
 
         #Loss parameters
         self.loss_params = {k: v for k, v in self.hyperparameters.get_parameters()['Loss'].items()}
-        self.weights = self.param_converter._convert_param(self.loss_params.get('weights', "False"))
+        self.weights = self.param_converter._convert_param(self.loss_params.get('weights', "False")) # tell the computer: I want to use class weights — please calculate them dynamically later 
         self.ignore_background = self.param_converter._convert_param(self.loss_params.get('ignore_background', "False"))
             
         # Training parameters
-        self.training_params = {k: v for k, v in self.hyperparameters.get_parameters()['Training'].items()}
-        self.batch_size = self.param_converter._convert_param(self.training_params.get('batch_size', 8))
-        self.val_split = self.param_converter._convert_param(self.training_params.get('val_split', 0.8))
-        self.epochs = self.param_converter._convert_param(self.training_params.get('epochs', 10))
-        self.early_stopping = self.param_converter._convert_param(self.training_params.get('early_stopping', "False"))
-        self.metrics_str = self.param_converter._convert_param(self.training_params.get('metrics', ''))        
+        self.training_params = {k: v for k, v in self.hyperparameters.get_parameters()['Training'].items()} # Pulls out all training-related settings from your config (like batch size, epochs, metrics, early stopping). # Stores them in a dictionary called self.training_params.
+        self.batch_size = self.param_converter._convert_param(self.training_params.get('batch_size', 8)) # Batch size controls how many images are passed to the model at once. Bigger batch size = faster but more memory use.
+        self.val_split = self.param_converter._convert_param(self.training_params.get('val_split', 0.8)) # You train the model on part of the data (train set), And validate on another part (val set) to see how well it generalizes.
+        self.epochs = self.param_converter._convert_param(self.training_params.get('epochs', 10)) # Gets the number of times (epochs) the model will see the full dataset during training.
+        self.early_stopping = self.param_converter._convert_param(self.training_params.get('early_stopping', "False")) # Should I stop early if validation loss doesn’t improve? Early stopping prevents overfitting and saves training time.
+        self.metrics_str = self.param_converter._convert_param(self.training_params.get('metrics', ''))  # The second part — '' — is an empty string, and it’s the default value.       
        
         # Data parameters
         self.data = {k: v for k, v in self.hyperparameters.get_parameters()['Data'].items()}
         self.img_res = self.param_converter._convert_param(self.data.get('img_res', 560))
         self.crop_size = self.param_converter._convert_param(self.data.get('crop_size', 224))
         self.num_samples = self.param_converter._convert_param(self.data.get('num_samples', 500))
-
+        """"what heming write
+        """
+        # Data augmentation parameters
+        #self.data_aug_settings = {k: v for k, v in self.hyperparameters.get_parameters()['Data_augmentation'].items()}
+        #self.data_augmentation = self.param_converter._convert_param(self.data_aug_settings.get('data_augmentation', False))
+        #if self.data_augmentation==True:
+        #    self.aug_brightness=self.param_converter._convert_param(self.data.get('brightness', 0))
+        #    self.aug_angle = self.param_converter._convert_param(self.data_aug_settings.get('angle', 0))
+        #    self.aug_translate = self.param_converter._convert_param(self.data_aug_settings.get('translate', [0, 0]))
+        #    self.aug_scale = self.param_converter._convert_param(self.data_aug_settings.get('scale', 1.0))
+        #    self.aug_shear = self.param_converter._convert_param(self.data_aug_settings.get('shear', [0, 0]))
+        # use the dictionary-based pattern
+        self.data_aug_settings = {k: v for k, v in self.hyperparameters.get_parameters()['Data_augmentation'].items()}
+        self.data_augmentation = self.param_converter._convert_param(self.data_aug_settings.get('data_augmentation', False))
+        self.augmentation_mapping = {
+        'brightness': self.param_converter._convert_param(self.data_aug_settings.get('brightness', 0)),
+        'angle': self.param_converter._convert_param(self.data_aug_settings.get('angle', 0)),
+        'translate': self.param_converter._convert_param(self.data_aug_settings.get('translate', [0, 0])),
+        'scale': self.param_converter._convert_param(self.data_aug_settings.get('scale', 1.0)),
+        'shear': self.param_converter._convert_param(self.data_aug_settings.get('shear', [0, 0]))
+        }
+        """"
+        """
         self.training_time = datetime.now().strftime("%d-%m-%y-%H-%M-%S")
 
         if self.ignore_background:
@@ -409,7 +438,8 @@ class Training:
             data_stats=data_stats,
             img_res=self.img_res, 
             ignore_background=self.ignore_background,
-            weights=self.weights
+            data_augmentation=self.data_augmentation,
+            augmentation_params=self.augmentation_mapping
         )
         val_dataset = TiffDatasetLoader(
             indices=val_indices,
@@ -419,8 +449,7 @@ class Training:
             crop_size=(self.crop_size, self.crop_size),
             data_stats=data_stats,
             img_res=self.img_res,
-            ignore_background=self.ignore_background,
-            weights=self.weights
+            ignore_background=self.ignore_background
         )
         test_dataset = TiffDatasetLoader(
             indices=test_indices,
@@ -430,14 +459,12 @@ class Training:
             crop_size=(self.crop_size, self.crop_size),
             data_stats=data_stats,
             img_res=self.img_res,
-            ignore_background=self.ignore_background,
-            weights=self.weights
+            ignore_background=self.ignore_background
         )
 
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=2,
                                   pin_memory=True, drop_last=True)
-        val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=2, 
-                                 pin_memory=True, drop_last=True)
+        val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=2, drop_last=True)
         test_loader = DataLoader(test_dataset, batch_size=10, shuffle=False, num_workers=2, drop_last=True)
 
         self.logger.save_indices_to_file([train_indices, val_indices, test_indices])
@@ -452,69 +479,77 @@ class Training:
     def training_loop(self, optimizer, scheduler):
         
         def print_epoch_box(epoch, total_epochs):
+            # Generate the epoch string
             epoch_str = f" Epoch {epoch}/{total_epochs} "
-            box_width = len(epoch_str) + 4
+        
+            # Determine the width of the box based on the string length
+            box_width = len(epoch_str) + 4  # Add padding for the box
+        
+            # Create the box
             print(f"╔{'═' * (box_width - 2)}╗")
             print(f"║{epoch_str.center(box_width - 2)}║")
             print(f"╚{'═' * (box_width - 2)}╝")
-        
+    
         scaler = None
         if self.device == "cuda":
             scaler = torch.amp.GradScaler()
-            torch.backends.cudnn.benchmark = True  # Optimize conv layers
-
-        metrics = self.initialize_metrics()
+            cudnn.benchmark = True
+    
+        # Initialize metric instances and losses
+        metrics = self.initialize_metrics()  # This list includes your ConfusionMatrix instance if enabled
         loss_dict = {"train": {}, "val": {}}
+    
+        # Build a list of display metric names (excluding "ConfusionMatrix")
         display_metrics = [m for m in self.metrics if m != "ConfusionMatrix"]
         metrics_dict = {phase: {metric: [] for metric in display_metrics} for phase in ["train", "val"]}
         best_val_loss = float("inf")
         best_val_metrics = {metric: 0 for metric in display_metrics}
-
+            
         for epoch in range(1, self.epochs + 1):
+            
             print_epoch_box(epoch, self.epochs)
-            epoch_val_loss = None if self.early_stopping else None
+            
+            if self.early_stopping:
+                epoch_val_loss = None  # To store validation loss from the "val" phase
 
             for phase in ["train", "val"]:
                 is_training = (phase == "train")
                 self.model.train() if is_training else self.model.eval()
-
+        
                 running_loss = 0.0
                 running_metrics = {metric: 0.0 for metric in display_metrics}
                 total_samples = 0
-
-                with tqdm(total=len(self.dataloaders[phase]), unit="batch", leave=True) as pbar:
+        
+                with tqdm(total=len(self.dataloaders[phase]), unit="batch") as pbar:
                     for inputs, labels, weights in self.dataloaders[phase]:
-                        # Move data to the proper device
-                        inputs, labels, weights = inputs.to(self.device), labels.to(self.device), weights.to(self.device)
 
+                        inputs, labels, weights = inputs.to(self.device), labels.to(self.device), weights.to(self.device)
                         optimizer.zero_grad()
                         batch_weights = torch.mean(weights, dim=0)
-                        batch_weights = torch.clamp(batch_weights, min=1e-6)  # Avoid exact zero values
+
                         with torch.set_grad_enabled(is_training):
-                          
-                            # Forward pass under autocast using bfloat16
                             with torch.autocast(device_type=self.device, dtype=torch.bfloat16):
                                 outputs = self.model(inputs)
+                                if self.loss_params.get('loss') in ['NLLLoss']:
+                                    outputs = nn_func.log_softmax(outputs, dim=1)
 
-                            # If using NLLLoss, apply log_softmax to outputs
-                            if self.loss_params.get('loss') in ['NLLLoss']:
-                                outputs = torch.nn.functional.log_softmax(outputs, dim=1)
+                                if self.num_classes == 1:
+                                    outputs = outputs.squeeze()  
+                                    labels = labels.squeeze().float() 
+                                else:
+                                    labels = labels.squeeze().long()  
 
-                            # Adjust label type based on number of classes:
-                            if self.num_classes == 1:
-                                outputs = outputs.squeeze()
-                                # For binary segmentation using BCE, targets must be float
-                                labels = labels.squeeze().float()
-                            else:
-                                # For multi-class segmentation with CrossEntropyLoss, targets must be long
-                                labels = labels.squeeze().long()
+                                #only apply class weights to multiclass segmentation
+                                if self.num_classes > 1:
+                                    if self.weights:
+                                        loss_fn = self.initialize_loss(weight=batch_weights)
+                                    else:
+                                        loss_fn = self.initialize_loss()
+                                else:
+                                    loss_fn = self.initialize_loss()
 
-                            # Initialize loss function (apply class weights only if applicable)
-                            loss_fn = self.initialize_loss(weight=batch_weights if (self.weights and self.num_classes > 1) else None)
-
-                            # Cast outputs to float32 before computing the loss
-                            loss = loss_fn(outputs.float(), labels)
-                           
+                                loss = loss_fn(outputs, labels)
+                               
                             if is_training:
                                 if scaler:
                                     scaler.scale(loss).backward()
@@ -523,53 +558,53 @@ class Training:
                                 else:
                                     loss.backward()
                                     optimizer.step()
-
+        
                                 if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                                     scheduler.step(loss)
                                 else:
                                     scheduler.step()
-
+        
                         running_loss += loss.item()
                         total_samples += labels.size(0)
-
+        
                         with torch.no_grad():
                             preds = (torch.argmax(outputs, dim=1).long()
-                                    if self.num_classes > 1
-                                    else (outputs > 0.5).to(torch.uint8))
-                            # Ensure labels are long for metric computations (for multi-class)
+                                     if self.num_classes > 1
+                                     else (outputs > 0.5).to(torch.uint8))
                             labels = labels.long()
-
+        
+                            # Update display metrics only (skip ConfusionMatrix)
                             for metric_name, metric_fn in zip(self.metrics, metrics):
                                 if metric_name != "ConfusionMatrix":
                                     running_metrics[metric_name] += metric_fn(preds, labels).item()
-
+        
                         pbar.set_postfix(
                             loss=running_loss / (pbar.n + 1),
                             **{metric: running_metrics[metric] / (pbar.n + 1) for metric in display_metrics}
                         )
                         pbar.update(1)
-
+                                
                 epoch_loss = running_loss / len(self.dataloaders[phase])
                 epoch_metrics = {metric: running_metrics[metric] / len(self.dataloaders[phase])
-                                for metric in display_metrics}
+                                 for metric in display_metrics}
                 loss_dict[phase][epoch] = epoch_loss
-
+                        
                 for metric, value in epoch_metrics.items():
                     metrics_dict[phase][metric].append(value)
-
+        
                 print(f"{phase.title()} Loss: {epoch_loss: .4f}")
                 for metric, value in epoch_metrics.items():
                     print(f"{phase.title()} {metric}: {value: .4f}", end=" | ")
                 print()
-
+        
                 if phase == "val" and epoch_loss < best_val_loss:
                     best_val_loss = epoch_loss
                     torch.save(self.model.state_dict(), os.path.join(self.save_directory, "model_best_loss.pth"))
-
+        
                 if phase == "val":
                     if self.early_stopping:
-                        epoch_val_loss = epoch_loss
-
+                        epoch_val_loss = epoch_loss  # Save validation loss for early stopping
+                        
                     for metric, value in epoch_metrics.items():
                         if value > best_val_metrics[metric]:
                             best_val_metrics[metric] = value
@@ -577,13 +612,15 @@ class Training:
                                 self.model.state_dict(),
                                 os.path.join(self.save_directory, f"model_best_{metric}.pth")
                             )
-
-            if self.early_stopping and epoch_val_loss is not None:
+            
+            # Call early stopping after validation phase has finished for the epoch
+            if (self.early_stopping) and (epoch_val_loss is not None):
                 self.early_stopping_instance(epoch_val_loss, self.model)
                 if self.early_stopping_instance.early_stop:
                     print("Early stopping triggered")
-                    break
+                    break  # Exit training loop if no improvement for 'patience' epochs
 
+            
         print(f"Best Validation Metrics: {best_val_metrics}")
         
         return loss_dict, metrics_dict, metrics

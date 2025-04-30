@@ -50,6 +50,7 @@ class Inference:
         self.model_params = self.hyperparameters.get_parameters()['Model']
         self.data_params = self.hyperparameters.get_parameters()['Data']
         self.train_params = self.hyperparameters.get_parameters()['Training']
+        self.data_augmentation_params = self.hyperparameters.get_parameters()['Data_augmentation'] # we can read the parameters
 
         # Initialize dataset parameters
         self.img_res = int(self.data_params.get('img_res', 560))
