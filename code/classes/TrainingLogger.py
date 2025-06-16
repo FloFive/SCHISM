@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 
 class TrainingLogger:
-    def __init__(self, save_directory, num_classes, model_params, optimizer_params, scheduler_params, loss_params, training_params, data):
+    def __init__(self, save_directory, num_classes, model_params, optimizer_params, scheduler_params, loss_params, training_params, data, augmentation_mapping=False):
         """
         Initializes the TrainingLogger.
 
@@ -28,6 +28,8 @@ class TrainingLogger:
         self.loss_params = loss_params
         self.training_params = training_params
         self.data = data
+        if augmentation_mapping:
+            self.augmentation_mapping = augmentation_mapping
 
         os.makedirs(self.save_directory, exist_ok=True)
         
@@ -98,7 +100,12 @@ class TrainingLogger:
         config.add_section('Data')
         for key, value in self.data.items():
             config.set('Data', key, str(value))
-
+        
+        if hasattr(self, 'augmentation_mapping') and self.augmentation_mapping:
+            config.add_section('Data_augmentation')        
+            for key, value in self.augmentation_mapping.items():
+                config.set('Data_augmentation', key, str(value))
+        
         ini_file_path = os.path.join(self.save_directory, 'hyperparameters.ini')
         with open(ini_file_path, 'w') as configfile:
             config.write(configfile)

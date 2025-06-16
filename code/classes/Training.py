@@ -11,7 +11,7 @@ from tqdm import tqdm # Adds a progress bar to your training loop — super help
 from classes.TiffDatasetLoader import TiffDatasetLoader #  Loads .tif image/mask pairs
 from classes.ParamConverter import ParamConverter # Converts string config values into Python types (like converting 'True' → True)
 from classes.TrainingLogger import TrainingLogger # Saves plots, metrics, models.
-from classes.model_registry import model_mapping # Dictionary mapping model names (like 'UnetVanilla') to model classes.
+from classes.model_registry import model_mapping  # Dictionary mapping model names (like 'UnetVanilla') to model classes.
 from datetime import datetime # Used to timestamp the training session (e.g., 22-04-25-13-10-00)
 from torch.optim import Adagrad, Adam, AdamW, NAdam, RMSprop, RAdam, SGD # Imports a bunch of PyTorch optimizers
 # Imports all learning rate schedulers:
@@ -142,15 +142,18 @@ class Training: # This class contains everything needed to run a training sessio
         #    self.aug_scale = self.param_converter._convert_param(self.data_aug_settings.get('scale', 1.0))
         #    self.aug_shear = self.param_converter._convert_param(self.data_aug_settings.get('shear', [0, 0]))
         # use the dictionary-based pattern
-        self.data_aug_settings = {k: v for k, v in self.hyperparameters.get_parameters()['Data_augmentation'].items()}
-        self.data_augmentation = self.param_converter._convert_param(self.data_aug_settings.get('data_augmentation', False))
-        self.augmentation_mapping = {
-        'brightness': self.param_converter._convert_param(self.data_aug_settings.get('brightness', 0)),
-        'angle': self.param_converter._convert_param(self.data_aug_settings.get('angle', 0)),
-        'translate': self.param_converter._convert_param(self.data_aug_settings.get('translate', [0, 0])),
-        'scale': self.param_converter._convert_param(self.data_aug_settings.get('scale', 1.0)),
-        'shear': self.param_converter._convert_param(self.data_aug_settings.get('shear', [0, 0]))
-        }
+        """Heming modifies the code to make it adapt to the condition that there is no data_augmentation command in the hyperparameters.ini 
+        """
+        if 'Data_augmentation' in self.hyperparameters.get_parameters():
+            self.data_aug_settings = {k: v for k, v in self.hyperparameters.get_parameters()['Data_augmentation'].items()}
+            if self.data_aug_settings:
+                self.augmentation_mapping = {
+                'brightness': self.param_converter._convert_param(self.data_aug_settings.get('brightness', 0)),
+                'angle': self.param_converter._convert_param(self.data_aug_settings.get('angle', 0)),
+                'translate': self.param_converter._convert_param(self.data_aug_settings.get('translate', [0, 0])),
+                'scale': self.param_converter._convert_param(self.data_aug_settings.get('scale', 1.0)),
+                'shear': self.param_converter._convert_param(self.data_aug_settings.get('shear', [0, 0]))
+                }
         """"
         """
         self.training_time = datetime.now().strftime("%d-%m-%y-%H-%M-%S")
@@ -170,14 +173,42 @@ class Training: # This class contains everything needed to run a training sessio
                 print("Training will begin as normal.")
 
         self.save_directory = self.create_unique_folder()
+        """"
+        if self.augmentation_mapping:
+            self.logger = TrainingLogger(save_directory=self.save_directory,
+                                        num_classes=self.num_classes,
+                                        model_params=self.model_params,
+                                        optimizer_params=self.optimizer_params,
+                                        scheduler_params=self.scheduler_params,
+                                        loss_params=self.loss_params,
+                                        training_params=self.training_params,
+                                        data=self.data,
+                                        augmentation_mapping=self.augmentation_mapping)
+        else:
+            self.logger = TrainingLogger(save_directory=self.save_directory,
+                                        num_classes=self.num_classes,
+                                        model_params=self.model_params,
+                                        optimizer_params=self.optimizer_params,
+                                        scheduler_params=self.scheduler_params,
+                                        loss_params=self.loss_params,
+                                        training_params=self.training_params,
+                                        data=self.data,
+                                        )
+       """  
+        if hasattr(self, 'augmentation_mapping') and self.augmentation_mapping: 
+            augmentation_mapping = self.augmentation_mapping
+        else:
+            augmentation_mapping = False
         self.logger = TrainingLogger(save_directory=self.save_directory,
-                                    num_classes=self.num_classes,
-                                    model_params=self.model_params,
-                                    optimizer_params=self.optimizer_params,
-                                    scheduler_params=self.scheduler_params,
-                                    loss_params=self.loss_params,
-                                    training_params=self.training_params,
-                                    data=self.data)
+                                        num_classes=self.num_classes,
+                                        model_params=self.model_params,
+                                        optimizer_params=self.optimizer_params,
+                                        scheduler_params=self.scheduler_params,
+                                        loss_params=self.loss_params,
+                                        training_params=self.training_params,
+                                        data=self.data,
+                                        augmentation_mapping=augmentation_mapping)
+
                                     
     def create_metric(self, binary_metric, multiclass_metric):
         return (
@@ -429,6 +460,11 @@ class Training: # This class contains everything needed to run a training sessio
         
         indices = [train_indices, val_indices, test_indices]
 
+        if hasattr(self, 'augmentation_mapping') and self.augmentation_mapping:
+            augmentation_params = self.augmentation_mapping
+        else:
+            augmentation_params = False
+
         train_dataset = TiffDatasetLoader(
             indices=train_indices,
             img_data=img_data,
@@ -438,8 +474,8 @@ class Training: # This class contains everything needed to run a training sessio
             data_stats=data_stats,
             img_res=self.img_res, 
             ignore_background=self.ignore_background,
-            data_augmentation=self.data_augmentation,
-            augmentation_params=self.augmentation_mapping
+            weights=self.weights,
+            augmentation_params=augmentation_params
         )
         val_dataset = TiffDatasetLoader(
             indices=val_indices,
@@ -449,7 +485,8 @@ class Training: # This class contains everything needed to run a training sessio
             crop_size=(self.crop_size, self.crop_size),
             data_stats=data_stats,
             img_res=self.img_res,
-            ignore_background=self.ignore_background
+            ignore_background=self.ignore_background,
+            weights=self.weights
         )
         test_dataset = TiffDatasetLoader(
             indices=test_indices,
@@ -459,12 +496,14 @@ class Training: # This class contains everything needed to run a training sessio
             crop_size=(self.crop_size, self.crop_size),
             data_stats=data_stats,
             img_res=self.img_res,
-            ignore_background=self.ignore_background
+            ignore_background=self.ignore_background,
+            weights=self.weights
         )
 
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=2,
                                   pin_memory=True, drop_last=True)
-        val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=2, drop_last=True)
+        val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=2, 
+                                 pin_memory=True, drop_last=True)
         test_loader = DataLoader(test_dataset, batch_size=10, shuffle=False, num_workers=2, drop_last=True)
 
         self.logger.save_indices_to_file([train_indices, val_indices, test_indices])
@@ -493,7 +532,7 @@ class Training: # This class contains everything needed to run a training sessio
         scaler = None
         if self.device == "cuda":
             scaler = torch.amp.GradScaler()
-            cudnn.benchmark = True
+            torch.backends.cudnn.benchmark = True  # Optimize conv layers
     
         # Initialize metric instances and losses
         metrics = self.initialize_metrics()  # This list includes your ConfusionMatrix instance if enabled
@@ -520,35 +559,33 @@ class Training: # This class contains everything needed to run a training sessio
                 running_metrics = {metric: 0.0 for metric in display_metrics}
                 total_samples = 0
         
-                with tqdm(total=len(self.dataloaders[phase]), unit="batch") as pbar:
+                with tqdm(total=len(self.dataloaders[phase]), unit="batch", leave=True) as pbar:
                     for inputs, labels, weights in self.dataloaders[phase]:
-
+                        # Move data to the proper device
                         inputs, labels, weights = inputs.to(self.device), labels.to(self.device), weights.to(self.device)
                         optimizer.zero_grad()
                         batch_weights = torch.mean(weights, dim=0)
-
+                        batch_weights = torch.clamp(batch_weights, min=1e-6)  # Avoid exact zero values
+                        # Forward pass under autocast using bfloat16
                         with torch.set_grad_enabled(is_training):
                             with torch.autocast(device_type=self.device, dtype=torch.bfloat16):
                                 outputs = self.model(inputs)
+                                # If using NLLLoss, apply log_softmax to outputs
                                 if self.loss_params.get('loss') in ['NLLLoss']:
                                     outputs = nn_func.log_softmax(outputs, dim=1)
-
+                                # Adjust label type based on number of classes:
                                 if self.num_classes == 1:
                                     outputs = outputs.squeeze()  
+                                    # For binary segmentation using BCE, targets must be float
                                     labels = labels.squeeze().float() 
                                 else:
+                                    # For multi-class segmentation with CrossEntropyLoss, targets must be long
                                     labels = labels.squeeze().long()  
 
-                                #only apply class weights to multiclass segmentation
-                                if self.num_classes > 1:
-                                    if self.weights:
-                                        loss_fn = self.initialize_loss(weight=batch_weights)
-                                    else:
-                                        loss_fn = self.initialize_loss()
-                                else:
-                                    loss_fn = self.initialize_loss()
-
-                                loss = loss_fn(outputs, labels)
+                                # Initialize loss function (apply class weights only if applicable)
+                                loss_fn = self.initialize_loss(weight=batch_weights if (self.weights and self.num_classes > 1) else None)
+                                # Cast outputs to float32 before computing the loss
+                                loss = loss_fn(outputs.float(), labels)
                                
                             if is_training:
                                 if scaler:
@@ -571,6 +608,7 @@ class Training: # This class contains everything needed to run a training sessio
                             preds = (torch.argmax(outputs, dim=1).long()
                                      if self.num_classes > 1
                                      else (outputs > 0.5).to(torch.uint8))
+                            # Ensure labels are long for metric computations (for multi-class)
                             labels = labels.long()
         
                             # Update display metrics only (skip ConfusionMatrix)
@@ -614,7 +652,7 @@ class Training: # This class contains everything needed to run a training sessio
                             )
             
             # Call early stopping after validation phase has finished for the epoch
-            if (self.early_stopping) and (epoch_val_loss is not None):
+            if self.early_stopping and epoch_val_loss is not None:
                 self.early_stopping_instance(epoch_val_loss, self.model)
                 if self.early_stopping_instance.early_stop:
                     print("Early stopping triggered")

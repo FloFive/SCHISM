@@ -1,0 +1,6 @@
+[Data_augmentation]
+brightness = 0.2
+angle = 15
+translate = [10, 10]
+scale = 1.0
+shear = [10, 10]

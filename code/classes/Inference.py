@@ -50,7 +50,8 @@ class Inference:
         self.model_params = self.hyperparameters.get_parameters()['Model']
         self.data_params = self.hyperparameters.get_parameters()['Data']
         self.train_params = self.hyperparameters.get_parameters()['Training']
-        self.data_augmentation_params = self.hyperparameters.get_parameters()['Data_augmentation'] # we can read the parameters
+        if 'Data_augmentation' in self.hyperparameters.get_parameters():
+            self.data_augmentation_params = self.hyperparameters.get_parameters()['Data_augmentation'] # we can read the parameters
 
         # Initialize dataset parameters
         self.img_res = int(self.data_params.get('img_res', 560))
@@ -59,6 +60,22 @@ class Inference:
         self.num_classes = 1 if self.num_classes <= 2 else self.num_classes
         self.data_stats = self.load_data_stats_from_json()
         self.model_mapping = model_mapping
+
+        """"what heming write
+        """
+        if 'Data_augmentation' in self.hyperparameters.get_parameters():
+            self.data_aug_settings = {k: v for k, v in self.hyperparameters.get_parameters()['Data_augmentation'].items()}
+            if self.data_aug_settings:
+                self.augmentation_mapping = {
+                'brightness': self.param_converter._convert_param(self.data_aug_settings.get('brightness', 0)),
+                'angle': self.param_converter._convert_param(self.data_aug_settings.get('angle', 0)),
+                'translate': self.param_converter._convert_param(self.data_aug_settings.get('translate', [0, 0])),
+                'scale': self.param_converter._convert_param(self.data_aug_settings.get('scale', 1.0)),
+                'shear': self.param_converter._convert_param(self.data_aug_settings.get('shear', [0, 0]))
+                }     
+
+        """
+        """
 
         self.model = self.initialize_model()
     
@@ -142,6 +159,12 @@ class Inference:
             preds_folder = os.path.join(self.data_dir, subfolder, "preds")
             os.makedirs(preds_folder, exist_ok=True)
 
+        if 'Data_augmentation' in self.hyperparameters.get_parameters():
+            augmentation_params=self.augmentation_mapping;
+        else:
+            augmentation_params=False
+
+
         dataset = TiffDatasetLoader(
             img_data=img_data,
             indices=indices,
@@ -149,7 +172,8 @@ class Inference:
             num_classes=self.num_classes,
             img_res=self.img_res,
             crop_size=(self.crop_size, self.crop_size),
-            inference_mode=True
+            inference_mode=True,
+            augmentation_params=augmentation_params
         )
         return DataLoader(dataset, batch_size=1, shuffle=False)
 
