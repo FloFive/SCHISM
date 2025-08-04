@@ -7,6 +7,10 @@ import torch.nn.functional as nn_func
 from patchify import patchify
 import tifffile
 from pathlib import Path
+from classes.SaveMask import SaveMask
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
+import cv2
 
 class TiffDatasetLoader(VisionDataset):
 
@@ -296,7 +300,44 @@ class TiffDatasetLoader(VisionDataset):
 
         # what heming added: implementing the data augmentation methods on the image and mask
         if self.augmentation_params:
-            # Affine Transformation (angle, translate, shear)
+            transform_ops = []
+            transform_ops.append(
+                A.Affine(
+                     rotate=self.aug_angle,
+                     translate_percent=(
+                        self.aug_translate[0] / self.img_res,
+                        self.aug_translate[1] / self.img_res
+                        ),
+                        scale=self.aug_scale,
+                        shear=self.aug_shear,
+                        p=1.0,
+                        fit_output=False,
+                        keep_ratio=False,
+                        rotate_method="ellipse",
+                        balanced_scale=True,
+                        border_mode=cv2.BORDER_CONSTANT,
+                        fill=0,
+                        fill_mask=0
+                        )
+                    )
+            if self.aug_brightness > 0:
+                transform_ops.append(
+                     A.RandomBrightness(limit=self.aug_brightness, p=1.0)
+                     )
+            albumentation_transform = A.Compose(transform_ops)
+            img_np = img_resized.permute(1, 2, 0).numpy()
+            mask_np = mask_resized.numpy()
+            transformed = albumentation_transform(image=img_np, mask=mask_np)
+            img_np_aug = transformed['image']
+            mask_np_aug = transformed['mask']
+            img_resized = torch.from_numpy(img_np_aug).permute(2, 0, 1).float()
+            mask_resized = torch.from_numpy(mask_np_aug).long()
+        
+        img_normalized = torchvision.transforms.functional.normalize(img_resized, mean=m, std=s).float()
+
+        # mask_saver = SaveMask(full_pred, pred_save_path)
+        # mask_saver.save() 
+        """             # Affine Transformation (angle, translate, shear)
             img_resized = func_torch.affine(img_resized, angle=self.aug_angle, translate=self.aug_translate,
                                     scale=self.aug_scale, shear=self.aug_shear)
             mask_affine = mask_resized.unsqueeze(0).unsqueeze(0).float()  # For mask: shape [H, W] or [1, H, W] → add batch and channel dimensions # mask_resized is 2D or 3D (e.g., shape [H, W] or [1, H, W]), but affine() expects a 4D tensor of shape [N, C, H, W].
@@ -307,9 +348,7 @@ class TiffDatasetLoader(VisionDataset):
             if self.aug_brightness > 0:
                 brightness_factor = torch.empty(1).uniform_(1 - self.aug_brightness, 1 + self.aug_brightness).item()
                 img_resized = func_torch.adjust_brightness(img_resized, brightness_factor)
-        # end for implementing the data augmentation methods on the image and mask
-
-        img_normalized = torchvision.transforms.functional.normalize(img_resized, mean=m, std=s).float() 
+        # end for implementing the data augmentation methods on the image and mask """
         return img_normalized, mask_resized, weights
 
     def __len__(self):

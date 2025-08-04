@@ -1,3 +1,4 @@
+from PIL import Image
 import sys # For file and path handling
 import os # For file and path handling
 import torch # Core PyTorch library and neural network modules
@@ -28,6 +29,8 @@ import torch.nn.functional as nn_func
 import torch.backends.cudnn as cudnn
 # Utility that stops training early if validation loss stops improving.
 from early_stopping_pytorch import EarlyStopping
+from classes.SaveMask import SaveMask
+
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) # Adds the project root directory to the Python path, so you can import local modules.
 
@@ -433,6 +436,42 @@ class Training: # This class contains everything needed to run a training sessio
             val_indices_temp = [all_indices[i] for i in val_indices_temp]
             test_indices_temp = [all_indices[i] for i in test_indices_temp]
             return train_indices_temp, val_indices_temp, test_indices_temp
+        
+        def save_augmented_training_samples(train_dataset):
+            base_save_path = r"C:/Users/Heming.WANG/OneDrive - Akkodis/0_SCHISM_project/SCHISM-main/debug_augmented_data_save_angle"
+            for i in range(len(train_dataset)):
+                # Get one sample with augmentation applied
+                img_normalized, mask_resized, _ = train_dataset[i]
+
+                # --- Prepare image for saving (convert to HWC for RGB)
+                img_array = img_normalized.detach().cpu().numpy()
+                if img_array.ndim == 3 and img_array.shape[0] == 3:
+                    img_array = np.transpose(img_array, (1, 2, 0))  # CHW to HWC
+                img_array = (img_array * 255).clip(0, 255).astype(np.uint8)
+
+                # Define save paths
+                img_save_path = os.path.join(base_save_path, "train_images", f"img_{i}.png")
+                mask_save_path = os.path.join(base_save_path, "train_masks", f"mask_{i}.png")
+
+                # Create directories if they don't exist
+                os.makedirs(os.path.dirname(img_save_path), exist_ok=True)
+                os.makedirs(os.path.dirname(mask_save_path), exist_ok=True)
+
+                try:
+                    # Save image using PIL directly
+                    Image.fromarray(img_array).save(img_save_path)
+                    print(f"[✓] Saved image: {img_save_path}")
+                except Exception as e:
+                    print(f"[ERROR] Failed to save image {i}: {e}")
+
+                # Save mask using your custom class
+                try:
+                    mask_saver = SaveMask(mask_resized, mask_save_path)
+                    mask_saver.save()
+                    print(f"[✓] Saved img_{i}.png and mask_{i}.png")
+                except Exception as e:
+                    print(f"[ERROR] Failed to save mask {i}: {e}")
+
 
         img_data = {}
         mask_data = {}
@@ -502,6 +541,7 @@ class Training: # This class contains everything needed to run a training sessio
 
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=2,
                                   pin_memory=True, drop_last=True)
+
         val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=2, 
                                  pin_memory=True, drop_last=True)
         test_loader = DataLoader(test_dataset, batch_size=10, shuffle=False, num_workers=2, drop_last=True)
@@ -515,6 +555,9 @@ class Training: # This class contains everything needed to run a training sessio
             'indices': indices,
         }
 
+        save_augmented_training_samples(train_dataset)
+
+    
     def training_loop(self, optimizer, scheduler):
         
         def print_epoch_box(epoch, total_epochs):
@@ -679,3 +722,5 @@ class Training: # This class contains everything needed to run a training sessio
                                                 model=self.model, 
                                                 val_dataloader=self.dataloaders["val"], 
                                                 device=self.device)
+                
+

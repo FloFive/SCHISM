@@ -14,6 +14,8 @@ from classes.ParamConverter import ParamConverter
 import torch.nn.functional as nn_func
 from patchify import unpatchify
 import torchvision.transforms as Tc
+from classes.SaveMask import SaveMask
+
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -226,7 +228,9 @@ class Inference:
             base_name = os.path.basename(img_path[0])
             subfolder = os.path.basename(os.path.dirname(os.path.dirname(img_path[0])))
             pred_save_path = os.path.join(self.data_dir, subfolder, "preds", f"pred_{base_name}")
-            self._save_mask(full_pred, pred_save_path)
+            # self._save_mask(full_pred, pred_save_path)
+            mask_saver = SaveMask(full_pred, pred_save_path)
+            mask_saver.save()
             
 
     def _patch_based_prediction(self, patches):
@@ -299,15 +303,16 @@ class Inference:
             return scaled_mask
         else:  
             return mask_tensor * 255  # Converts 0 to 0 and 1 to 255
-
-    def _save_mask(self, mask_tensor, save_path):
-        """
-        Saves a segmentation mask to a file.
-
-        Args:
-            mask_tensor (torch.Tensor): The mask tensor to be saved.
-            save_path (str): The file path where the mask will be saved.
-        """
-        mask_array = mask_tensor.cpu().numpy().astype(np.uint8)
-        mask_image = Image.fromarray(mask_array)
-        mask_image.save(save_path)
+        
+    
+    #def _save_mask(self, mask_tensor, save_path):
+    #    """
+    #    Saves a segmentation mask to a file.
+    #
+    #    Args:
+    #        mask_tensor (torch.Tensor): The mask tensor to be saved.
+    #        save_path (str): The file path where the mask will be saved.
+    #   """
+    #    mask_array = mask_tensor.cpu().numpy().astype(np.uint8)
+    #    mask_image = Image.fromarray(mask_array)
+    #   mask_image.save(save_path)
